@@ -1,0 +1,82 @@
+{
+  "n_train_instances": 6000,
+  "n_train_samples": 60000,
+  "n_val_samples": 3000,
+  "n_test_instances": 50,
+  "final_model": "E · 15 feats, [512,512,256], dp 0.3",
+  "final_n_features": 15,
+  "final_config": {
+    "hidden_sizes": [
+      512,
+      512,
+      256
+    ],
+    "dropout": 0.3,
+    "batch_size": 256
+  },
+  "val_acc_final": 0.8576666712760925,
+  "best_epoch_final": 27,
+  "epochs_final": 38,
+  "val_acc_base": 0.7673333287239075,
+  "ils_optimal_hits": 10,
+  "ils_optimal_checked": 10,
+  "experiments": {
+    "A · 10 feats (sin anticipación)": {
+      "val_acc": 0.7673333287239075,
+      "gap_val": 13.32774421388158
+    },
+    "B · 12 feats (+ comparativas)": {
+      "val_acc": 0.8240000009536743,
+      "gap_val": 10.474789766357587
+    },
+    "C · 15 feats, [512,256,128], dp 0.2": {
+      "val_acc": 0.859666645526886,
+      "gap_val": 4.196070879321044
+    },
+    "D · 15 feats, [256,256], sin dropout": {
+      "val_acc": 0.8556666374206543,
+      "gap_val": 6.5386738481291875
+    },
+    "E · 15 feats, [512,512,256], dp 0.3": {
+      "val_acc": 0.8576666712760925,
+      "gap_val": 3.971423642375831
+    }
+  },
+  "gap_mmr_val": 6.944020907320465,
+  "test": {
+    "Modelo MLP": {
+      "mean_cost": 48.257214942859044,
+      "mean_gap": 4.415030131335313,
+      "pct_optimal": 20.0
+    },
+    "Modelo base (sin anticipación)": {
+      "mean_cost": 50.940917926303094,
+      "mean_gap": 9.947213135628786,
+      "pct_optimal": 6.0
+    },
+    "MMR (heurística clásica)": {
+      "mean_cost": 49.83016348193226,
+      "mean_gap": 7.682223203939117,
+      "pct_optimal": 6.0
+    },
+    "Greedy secuencial": {
+      "mean_cost": 68.44047853789715,
+      "mean_gap": 49.29060534785315,
+      "pct_optimal": 0.0
+    },
+    "Experto (ILS)": {
+      "mean_cost": 46.26281573773545,
+      "mean_gap": 0.0,
+      "pct_optimal": 100.0
+    }
+  },
+  "model_vs_mmr": {
+    "wins": 0.6,
+    "ties": 0.14
+  },
+  "ejemplo_estado": {
+    "greedy": 1,
+    "mmr": 5,
+    "experto": 3
+  }
+}
