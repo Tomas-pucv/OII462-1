@@ -1,0 +1,311 @@
+{
+  "n_train_instances": 6000,
+  "n_train_samples": 60000,
+  "n_val_samples": 3000,
+  "n_test_instances": 50,
+  "n_test_samples": 500,
+  "vec_len": 16,
+  "features": [
+    "p_ij",
+    "valor",
+    "p_vs_mejor",
+    "es_global",
+    "no_disponible",
+    "asignado",
+    "q_sobrevive",
+    "valor_en_juego",
+    "ganancia",
+    "es_mmr",
+    "armas_en_obj",
+    "ventaja",
+    "arrepentimiento",
+    "mmr_completa",
+    "q_final_mmr",
+    "frac_restantes"
+  ],
+  "n_rows": 81,
+  "final_model": "A · d=64, 2 capas, sin Dropout",
+  "final_config": {
+    "d": 64,
+    "n_layers": 2,
+    "dropout": 0.0
+  },
+  "final_params": 75776,
+  "val_acc_final": 0.8726666569709778,
+  "best_epoch_final": 48,
+  "epochs_final": 57,
+  "experiments": {
+    "A · d=64, 2 capas, sin Dropout": {
+      "val_acc": 0.8726666569709778,
+      "val_loss": 0.3126058280467987,
+      "gap_val": 3.3536436746450407,
+      "params": 75776,
+      "config": {
+        "d": 64,
+        "n_layers": 2,
+        "dropout": 0.0
+      }
+    },
+    "B · d=64, 2 capas, Dropout 0.1": {
+      "val_acc": 0.871999979019165,
+      "val_loss": 0.3203166425228119,
+      "gap_val": 3.5094811679204,
+      "params": 75776,
+      "config": {
+        "d": 64,
+        "n_layers": 2,
+        "dropout": 0.1
+      }
+    },
+    "C · d=64, 2 capas, Dropout 0.2": {
+      "val_acc": 0.862333357334137,
+      "val_loss": 0.3351871073246002,
+      "gap_val": 3.90481504487238,
+      "params": 75776,
+      "config": {
+        "d": 64,
+        "n_layers": 2,
+        "dropout": 0.2
+      }
+    }
+  },
+  "gap_mmr_val": 6.944020907320465,
+  "acc_step": [
+    0.72,
+    0.74,
+    0.7766666666666666,
+    0.8633333333333333,
+    0.8566666666666667,
+    0.9166666666666666,
+    0.95,
+    0.93,
+    0.9733333333333334,
+    1.0
+  ],
+  "acc_mmr_step": [
+    0.66,
+    0.6533333333333333,
+    0.6766666666666666,
+    0.75,
+    0.7733333333333333,
+    0.8366666666666667,
+    0.8666666666666667,
+    0.92,
+    0.8566666666666667,
+    1.0
+  ],
+  "test": {
+    "Modelo (atención)": {
+      "mean_cost": 47.6968017214299,
+      "mean_gap": 2.9677121395262445,
+      "pct_optimal": 30.0
+    },
+    "MMR (heurística clásica)": {
+      "mean_cost": 49.83016348193226,
+      "mean_gap": 7.682223203939117,
+      "pct_optimal": 6.0
+    },
+    "Experto (ILS)": {
+      "mean_cost": 46.26281573773545,
+      "mean_gap": 0.0,
+      "pct_optimal": 100.0
+    }
+  },
+  "gap_mlp_t4": 4.415,
+  "model_vs_mmr": {
+    "wins": 0.72,
+    "ties": 0.2
+  },
+  "generalization": {
+    "10×8": {
+      "Modelo (atención)": 2.9677121395262445,
+      "MMR (heurística clásica)": 7.682223203939117,
+      "Experto (ILS)": 0.0
+    },
+    "15×10": {
+      "Modelo (atención)": 4.88615365799195,
+      "MMR (heurística clásica)": 7.106682890959432,
+      "Experto (ILS)": 0.0
+    },
+    "20×15": {
+      "Modelo (atención)": 3.8957913246110545,
+      "MMR (heurística clásica)": 5.674502546116332,
+      "Experto (ILS)": 0.0
+    }
+  },
+  "demo": {
+    "step": 4,
+    "assignment": [
+      3,
+      -1,
+      -1,
+      5,
+      -1,
+      1,
+      -1,
+      -1,
+      0,
+      -1
+    ],
+    "chosen": [
+      2,
+      2
+    ],
+    "row": 19,
+    "mmr": [
+      2,
+      2
+    ],
+    "model": [
+      2,
+      2
+    ],
+    "p_model": 0.999915599822998,
+    "n_actions": 48,
+    "expert_solution": [
+      3,
+      7,
+      2,
+      5,
+      3,
+      1,
+      6,
+      4,
+      0,
+      5
+    ],
+    "expert_cost": 52.94866774935848,
+    "steps": [
+      {
+        "k": 0,
+        "free": 10,
+        "n_actions": 80,
+        "chosen": [
+          5,
+          1
+        ],
+        "mmr": [
+          1,
+          1
+        ]
+      },
+      {
+        "k": 1,
+        "free": 9,
+        "n_actions": 72,
+        "chosen": [
+          3,
+          5
+        ],
+        "mmr": [
+          6,
+          3
+        ]
+      },
+      {
+        "k": 2,
+        "free": 8,
+        "n_actions": 64,
+        "chosen": [
+          0,
+          3
+        ],
+        "mmr": [
+          6,
+          3
+        ]
+      },
+      {
+        "k": 3,
+        "free": 7,
+        "n_actions": 56,
+        "chosen": [
+          8,
+          0
+        ],
+        "mmr": [
+          8,
+          0
+        ]
+      },
+      {
+        "k": 4,
+        "free": 6,
+        "n_actions": 48,
+        "chosen": [
+          2,
+          2
+        ],
+        "mmr": [
+          2,
+          2
+        ]
+      },
+      {
+        "k": 5,
+        "free": 5,
+        "n_actions": 40,
+        "chosen": [
+          7,
+          4
+        ],
+        "mmr": [
+          7,
+          4
+        ]
+      },
+      {
+        "k": 6,
+        "free": 4,
+        "n_actions": 32,
+        "chosen": [
+          1,
+          7
+        ],
+        "mmr": [
+          1,
+          7
+        ]
+      },
+      {
+        "k": 7,
+        "free": 3,
+        "n_actions": 24,
+        "chosen": [
+          6,
+          6
+        ],
+        "mmr": [
+          6,
+          6
+        ]
+      },
+      {
+        "k": 8,
+        "free": 2,
+        "n_actions": 16,
+        "chosen": [
+          4,
+          3
+        ],
+        "mmr": [
+          9,
+          3
+        ]
+      },
+      {
+        "k": 9,
+        "free": 1,
+        "n_actions": 8,
+        "chosen": [
+          9,
+          5
+        ],
+        "mmr": [
+          9,
+          5
+        ]
+      }
+    ]
+  }
+}
