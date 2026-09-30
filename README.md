@@ -16,11 +16,10 @@ contra un método exacto).
 | Entregable | Archivo |
 |---|---|
 | Informe (puntos 1–3) | [`Tarea5_WTAP_informe.pdf`](Tarea5_WTAP_informe.pdf) · [`.docx` editable](Tarea5_WTAP_informe.docx) |
-| Notebook (Colab, puntos 4–5 y opcionales 7–8) | [`Tarea5_WTAP_puntero.ipynb`](Tarea5_WTAP_puntero.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/festive-pasteur-se68vm/Tarea5_WTAP_puntero.ipynb) |
+| Notebook (Colab, puntos 4–5 y opcionales 7–8) | [`Tarea5_WTAP_puntero.ipynb`](Tarea5_WTAP_puntero.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/dense-model-wtap-rcjk1o/Tarea5_WTAP_puntero.ipynb) |
 | Presentación (punto 6) | [`Tarea5_WTAP_presentacion.pptx`](Tarea5_WTAP_presentacion.pptx) · [`Tarea5_WTAP_presentacion.pdf`](Tarea5_WTAP_presentacion.pdf) |
 | Figuras y resultados | [`figuras_t5/`](figuras_t5) (generadas por el notebook, incluye `resultados.json`) |
 
-> Si la rama se fusiona, reemplaza `claude/festive-pasteur-se68vm` por la rama destino en el link de Colab.
 > El nombre del grupo aparece como `[Nombre(s) del grupo]` en el informe y la presentación.
 
 ### Resumen
