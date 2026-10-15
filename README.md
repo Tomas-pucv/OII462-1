@@ -4,8 +4,44 @@ Modelos neuronales que aprenden a construir soluciones del **Weapon-Target Assig
 imitando, paso a paso, las decisiones de un algoritmo experto (Búsqueda Local Iterada, verificada
 contra un método exacto).
 
+- **Proyecto del módulo:** presentación final (13–15 min) del Transformer encoder–decoder con puntero.
 - **Tarea 5:** encoder con self-attention y capa de decisión tipo *pointer* (acciones = pares arma → objetivo).
 - **Tarea 4:** MLP de capas densas (armas en orden fijo).
+
+---
+
+## Proyecto del módulo — Transformer con puntero para el WTAP
+
+### Entregables
+
+| Entregable | Archivo |
+|---|---|
+| Presentación (14 diapositivas, con notas del orador y tiempos) | [`Proyecto_WTAP_presentacion.pptx`](Proyecto_WTAP_presentacion.pptx) · [`Proyecto_WTAP_presentacion.pdf`](Proyecto_WTAP_presentacion.pdf) |
+| Notebook (Colab) | [`Proyecto_WTAP_transformer.ipynb`](Proyecto_WTAP_transformer.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/dense-model-wtap-rcjk1o/Proyecto_WTAP_transformer.ipynb) |
+| Figuras y resultados | [`figuras_proyecto/`](figuras_proyecto) (generadas por el notebook, incluye `resultados.json`) |
+
+La presentación sigue la guía del módulo: (1) problema con definición formal y ejemplo visual, (2) secuencia de
+entrada y justificación de cada una de las 16 features, (3) generación de datos (experto ILS, descomposición y
+codificación de la salida), (4) diagrama de la arquitectura con encoder y decoder diferenciados, y (5) experimentos:
+tabla de hiperparámetros, convergencia, evaluación con media ± desviación contra MMR y un constructivo aleatorio,
+desempeño por tamaño de instancia (5×4 a 30×20) y discusión.
+
+### Modelo
+
+- **Encoder:** embedding lineal compartido 16 → 64 y 2 capas de self-attention (1 cabeza) + feed-forward 64 → 128 → 64,
+  con residual y LayerNorm. Entrada: la secuencia de `1 + W·T` filas (fila global + un par arma → objetivo por fila).
+- **Decoder:** contexto `[h_global ; promedio de pares disponibles]` → query → puntero `q·h_r/√d` → máscara de pares no
+  disponibles → softmax sobre las acciones (sin glimpse; ver la comparación con Kool et al. en la presentación).
+- Mismo modelo y pipeline de la Tarea 5, reentrenado en el notebook del proyecto.
+
+### Reproducir
+
+```bash
+python scripts/make_presentation_proyecto.py
+soffice --headless --convert-to pdf Proyecto_WTAP_presentacion.pptx
+```
+
+La diapositiva 2 usa además `figuras/instancia.png` (la misma instancia de ejemplo de la Tarea 4).
 
 ---
 

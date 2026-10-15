@@ -1,0 +1,484 @@
+{
+  "n_train_instances": 6000,
+  "n_train_samples": 60000,
+  "n_val_samples": 3000,
+  "n_test_instances": 50,
+  "n_test_samples": 500,
+  "vec_len": 16,
+  "features": [
+    "p_ij",
+    "valor",
+    "p_vs_mejor",
+    "es_global",
+    "no_disponible",
+    "asignado",
+    "q_sobrevive",
+    "valor_en_juego",
+    "ganancia",
+    "es_mmr",
+    "armas_en_obj",
+    "ventaja",
+    "arrepentimiento",
+    "mmr_completa",
+    "q_final_mmr",
+    "frac_restantes"
+  ],
+  "n_rows": 81,
+  "final_model": "d=64, 2 capas, 1 cabeza, sin Dropout",
+  "final_config": {
+    "d": 64,
+    "n_layers": 2,
+    "dropout": 0.0
+  },
+  "final_params": 75776,
+  "val_acc_final": 0.8726666569709778,
+  "best_epoch_final": 48,
+  "epochs_final": 57,
+  "experiments": {
+    "d=64, 2 capas, 1 cabeza, sin Dropout": {
+      "val_acc": 0.8726666569709778,
+      "val_loss": 0.3126058280467987,
+      "gap_val": 3.3536436746450407,
+      "params": 75776,
+      "config": {
+        "d": 64,
+        "n_layers": 2,
+        "dropout": 0.0
+      }
+    }
+  },
+  "gap_mmr_val": 6.944020907320465,
+  "acc_step": [
+    0.72,
+    0.74,
+    0.7766666666666666,
+    0.8633333333333333,
+    0.8566666666666667,
+    0.9166666666666666,
+    0.95,
+    0.93,
+    0.9733333333333334,
+    1.0
+  ],
+  "acc_mmr_step": [
+    0.66,
+    0.6533333333333333,
+    0.6766666666666666,
+    0.75,
+    0.7733333333333333,
+    0.8366666666666667,
+    0.8666666666666667,
+    0.92,
+    0.8566666666666667,
+    1.0
+  ],
+  "test": {
+    "Modelo (atención)": {
+      "mean_cost": 47.6968017214299,
+      "std_cost": 8.853457487722414,
+      "mean_gap": 2.9677121395262445,
+      "std_gap": 3.6828109110498572,
+      "median_gap": 1.8500830598814577,
+      "pct_optimal": 30.0
+    },
+    "MMR (heurística clásica)": {
+      "mean_cost": 49.83016348193226,
+      "std_cost": 8.90448251504616,
+      "mean_gap": 7.682223203939117,
+      "std_gap": 4.907487710076813,
+      "median_gap": 7.753805286468007,
+      "pct_optimal": 6.0
+    },
+    "Aleatorio": {
+      "mean_cost": 186.1545843256204,
+      "std_cost": 55.38606110015561,
+      "mean_gap": 309.72082144224487,
+      "std_gap": 131.7661223573169,
+      "median_gap": 291.6438956091192,
+      "pct_optimal": 0.0
+    },
+    "Experto (ILS)": {
+      "mean_cost": 46.26281573773545,
+      "std_cost": 7.975278195834008,
+      "mean_gap": 0.0,
+      "std_gap": 0.0,
+      "median_gap": 0.0,
+      "pct_optimal": 100.0
+    }
+  },
+  "gap_mlp_t4": 4.415,
+  "model_vs_mmr": {
+    "wins": 0.72,
+    "ties": 0.2
+  },
+  "times_ms": {
+    "Modelo (atención)": 18.05744920000052,
+    "MMR (heurística clásica)": 0.11651362999828052,
+    "Experto (ILS)": 20.059249749999708
+  },
+  "sizes": {
+    "5×4": {
+      "Modelo (atención)": {
+        "mean": 1.6713167122531614,
+        "std": 4.208975105305664,
+        "median": 0.0,
+        "n": 30
+      },
+      "MMR (heurística clásica)": {
+        "mean": 6.458159018345261,
+        "std": 7.866748429624979,
+        "median": 3.2850775062204574,
+        "n": 30
+      },
+      "Aleatorio": {
+        "mean": 258.78625714177934,
+        "std": 102.07508853766045,
+        "median": 255.61489369584942,
+        "n": 30
+      },
+      "Experto (ILS)": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "n": 30
+      }
+    },
+    "10×8": {
+      "Modelo (atención)": {
+        "mean": 2.9677121395262445,
+        "std": 3.6828109110498572,
+        "median": 1.8500830598814577,
+        "n": 50
+      },
+      "MMR (heurística clásica)": {
+        "mean": 7.682223203939117,
+        "std": 4.907487710076813,
+        "median": 7.753805286468007,
+        "n": 50
+      },
+      "Aleatorio": {
+        "mean": 316.20344922314234,
+        "std": 100.124380649345,
+        "median": 304.26942074192004,
+        "n": 50
+      },
+      "Experto (ILS)": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "n": 50
+      }
+    },
+    "15×10": {
+      "Modelo (atención)": {
+        "mean": 5.278757776512409,
+        "std": 3.8721098953335016,
+        "median": 4.324880267185904,
+        "n": 30
+      },
+      "MMR (heurística clásica)": {
+        "mean": 7.820792849718553,
+        "std": 4.9151445697268015,
+        "median": 7.103948031384788,
+        "n": 30
+      },
+      "Aleatorio": {
+        "mean": 454.32595934944095,
+        "std": 159.71264185407344,
+        "median": 446.99326720452984,
+        "n": 30
+      },
+      "Experto (ILS)": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "n": 30
+      }
+    },
+    "20×15": {
+      "Modelo (atención)": {
+        "mean": 3.9898116935574626,
+        "std": 3.052792682747591,
+        "median": 3.3637460702533706,
+        "n": 30
+      },
+      "MMR (heurística clásica)": {
+        "mean": 5.7126099371521954,
+        "std": 3.1125678884339747,
+        "median": 5.964092404427168,
+        "n": 30
+      },
+      "Aleatorio": {
+        "mean": 373.09219038707766,
+        "std": 89.88086028044324,
+        "median": 376.24127597098993,
+        "n": 30
+      },
+      "Experto (ILS)": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "n": 30
+      }
+    },
+    "30×20": {
+      "Modelo (atención)": {
+        "mean": 5.301267012527876,
+        "std": 2.8860614624913508,
+        "median": 5.717950745827616,
+        "n": 30
+      },
+      "MMR (heurística clásica)": {
+        "mean": 5.888515409750662,
+        "std": 2.9869530669577817,
+        "median": 6.123453987537242,
+        "n": 30
+      },
+      "Aleatorio": {
+        "mean": 587.7456636181627,
+        "std": 103.9633735123516,
+        "median": 569.4794587257336,
+        "n": 30
+      },
+      "Experto (ILS)": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "n": 30
+      }
+    }
+  },
+  "exact_check_5x4": {
+    "5×4": 30
+  },
+  "hparams": {
+    "Arquitectura": {
+      "Capas del encoder": "2 (self-attention + feed-forward)",
+      "Capas del decoder": "1 (query de contexto + puntero, sin glimpse)",
+      "Cabezas de atención (MHA)": "1",
+      "Dimensión de los embeddings d": "64",
+      "Feed-forward": "64 → 128 → 64 (ReLU)",
+      "Normalización": "LayerNorm después de cada residual",
+      "Dropout": "0.0 (barrido 0 / 0,1 / 0,2 en la Tarea 5)",
+      "Parámetros entrenables": "75 776"
+    },
+    "Entrenamiento": {
+      "Split entrenamiento / validación": "6000 / 300 instancias (60 000 / 3 000 pares estado-acción)",
+      "Conjunto de prueba (aparte)": "50 instancias 10×8 (las mismas de la Tarea 4)",
+      "Épocas": "máx. 100; early stopping en la época 56 (mejor: 48)",
+      "Batch size": "256",
+      "Optimizador y tasa de aprendizaje": "Adam, lr = 1e-3",
+      "Scheduler": "no se usó",
+      "Early stopping": "pérdida de validación, paciencia 8, min_delta 1e-3; restaura la mejor época",
+      "Función de pérdida": "CrossEntropyLoss sobre logits enmascarados (−1e9 en filas no disponibles)",
+      "Métrica de validación": "pérdida (early stopping); accuracy y gap del rollout (selección)",
+      "Tiempo de entrenamiento": "19.3 min en cpu"
+    }
+  },
+  "convergence": {
+    "best_epoch": 48.0,
+    "epochs": 57.0,
+    "train_loss_best": 0.31315447670618696,
+    "val_loss_best": 0.3126058280467987,
+    "train_loss_last": 0.30701655570666,
+    "val_loss_last": 0.33402255177497864,
+    "train_acc_best": 0.8732333333333333,
+    "val_acc_best": 0.8726666569709778
+  },
+  "dropout_sweep_t5": {
+    "0.0": {
+      "acc_val": 0.873,
+      "gap_val": 3.35
+    },
+    "0.1": {
+      "acc_val": 0.872,
+      "gap_val": 3.51
+    },
+    "0.2": {
+      "acc_val": 0.862,
+      "gap_val": 3.9
+    }
+  },
+  "gap_val_final": 3.3536436746450407,
+  "demo": {
+    "step": 4,
+    "assignment": [
+      3,
+      -1,
+      -1,
+      5,
+      -1,
+      1,
+      -1,
+      -1,
+      0,
+      -1
+    ],
+    "chosen": [
+      2,
+      2
+    ],
+    "row": 19,
+    "mmr": [
+      2,
+      2
+    ],
+    "model": [
+      2,
+      2
+    ],
+    "p_model": 0.999915599822998,
+    "n_actions": 48,
+    "expert_solution": [
+      3,
+      7,
+      2,
+      5,
+      3,
+      1,
+      6,
+      4,
+      0,
+      5
+    ],
+    "expert_cost": 52.94866774935848,
+    "ej_step": 2,
+    "ej_chosen": [
+      0,
+      3
+    ],
+    "ej_n_actions": 64,
+    "steps": [
+      {
+        "k": 0,
+        "free": 10,
+        "n_actions": 80,
+        "chosen": [
+          5,
+          1
+        ],
+        "mmr": [
+          1,
+          1
+        ]
+      },
+      {
+        "k": 1,
+        "free": 9,
+        "n_actions": 72,
+        "chosen": [
+          3,
+          5
+        ],
+        "mmr": [
+          6,
+          3
+        ]
+      },
+      {
+        "k": 2,
+        "free": 8,
+        "n_actions": 64,
+        "chosen": [
+          0,
+          3
+        ],
+        "mmr": [
+          6,
+          3
+        ]
+      },
+      {
+        "k": 3,
+        "free": 7,
+        "n_actions": 56,
+        "chosen": [
+          8,
+          0
+        ],
+        "mmr": [
+          8,
+          0
+        ]
+      },
+      {
+        "k": 4,
+        "free": 6,
+        "n_actions": 48,
+        "chosen": [
+          2,
+          2
+        ],
+        "mmr": [
+          2,
+          2
+        ]
+      },
+      {
+        "k": 5,
+        "free": 5,
+        "n_actions": 40,
+        "chosen": [
+          7,
+          4
+        ],
+        "mmr": [
+          7,
+          4
+        ]
+      },
+      {
+        "k": 6,
+        "free": 4,
+        "n_actions": 32,
+        "chosen": [
+          1,
+          7
+        ],
+        "mmr": [
+          1,
+          7
+        ]
+      },
+      {
+        "k": 7,
+        "free": 3,
+        "n_actions": 24,
+        "chosen": [
+          6,
+          6
+        ],
+        "mmr": [
+          6,
+          6
+        ]
+      },
+      {
+        "k": 8,
+        "free": 2,
+        "n_actions": 16,
+        "chosen": [
+          4,
+          3
+        ],
+        "mmr": [
+          9,
+          3
+        ]
+      },
+      {
+        "k": 9,
+        "free": 1,
+        "n_actions": 8,
+        "chosen": [
+          9,
+          5
+        ],
+        "mmr": [
+          9,
+          5
+        ]
+      }
+    ]
+  }
+}
