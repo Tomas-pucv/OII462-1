@@ -31,7 +31,7 @@ contra un método exacto).
 - **Entrenamiento:** early stopping sobre la precisión de validación, AdamW, warm-up y comparación de 5 tamaños
   (0,97 M a 10,8 M parámetros).
 - **Evaluación:** precisión por cuartil de longitud; bonus con 2 capas, 4 cabezas y `max_length = 512`:
-  **78,0% en prueba** (no alcanza el 90%; el modelo base provisto da 65,6% y una regresión logística TF-IDF de
+  **79,0% en prueba** (no alcanza el 90%; el modelo base provisto da 63,0% y una regresión logística TF-IDF de
   referencia, 84,4%).
 - **Despliegue:** casos de falla (reseñas muy cortas, sarcasmo, contraste, doble negación) y reseñas en español
   (BPE no genera `[UNK]`, pero divide las palabras en fragmentos sin significado para el modelo).
@@ -39,7 +39,8 @@ contra un método exacto).
 ### Reproducir
 
 El notebook corre de principio a fin en Colab (GPU T4 recomendada) y descarga `stanfordnlp/imdb` desde
-Hugging Face. Las salidas guardadas se generaron en CPU (~12 min); en GPU los números pueden variar levemente.
+Hugging Face. Las salidas guardadas son de una corrida en una GPU T4 de Colab; al re-ejecutar, las cifras del
+entrenamiento pueden variar algunos puntos (dropout en GPU, orden de las sumas y desempates del tokenizador).
 
 ---
 
