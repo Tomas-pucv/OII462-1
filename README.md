@@ -7,6 +7,39 @@ contra un método exacto).
 - **Proyecto del módulo:** presentación final (13–15 min) del Transformer encoder–decoder con puntero.
 - **Tarea 5:** encoder con self-attention y capa de decisión tipo *pointer* (acciones = pares arma → objetivo).
 - **Tarea 4:** MLP de capas densas (armas en orden fijo).
+- **Laboratorio 2:** Transformer implementado desde sus componentes para clasificar el sentimiento de reseñas IMDB.
+
+---
+
+## Laboratorio 2 — Transformers para clasificación de sentimientos (IMDB)
+
+### Entregable
+
+| Entregable | Archivo |
+|---|---|
+| Notebook (Colab) | [`Lab2_2026_2.ipynb`](Lab2_2026_2.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/relaxed-wozniak-0hk3aa/Lab2_2026_2.ipynb) |
+
+### Resumen
+
+- **EDA:** longitudes sesgadas a la derecha (mediana 173 palabras, cola hasta 2.470), etiquetas balanceadas y
+  porcentaje de reseñas truncadas según `max_length`.
+- **Tokenizador BPE de 30.000 fragmentos** (cap. 12.5): gráfico del tamaño del vocabulario por iteración; las
+  fusiones se aplican en el orden en que se aprendieron y la puntuación se separa de las palabras.
+- **Atención** (cap. 12.2–12.3): `ScaledDotProductAttention`, `SingleHeadAttention` (Q/K/V) y
+  `MultiHeadAttention`, con máscara de padding y verificada contra `F.scaled_dot_product_attention`.
+- **Capa Transformer** (cap. 12.4): atención + residual + LayerNorm, FFN (ReLU, Dropout) + residual + LayerNorm.
+- **Entrenamiento:** early stopping sobre la precisión de validación, AdamW, warm-up y comparación de 5 tamaños
+  (0,97 M a 10,8 M parámetros).
+- **Evaluación:** precisión por cuartil de longitud; bonus con 2 capas, 4 cabezas y `max_length = 512`:
+  **78,0% en prueba** (no alcanza el 90%; el modelo base provisto da 65,6% y una regresión logística TF-IDF de
+  referencia, 84,4%).
+- **Despliegue:** casos de falla (reseñas muy cortas, sarcasmo, contraste, doble negación) y reseñas en español
+  (BPE no genera `[UNK]`, pero divide las palabras en fragmentos sin significado para el modelo).
+
+### Reproducir
+
+El notebook corre de principio a fin en Colab (GPU T4 recomendada) y descarga `stanfordnlp/imdb` desde
+Hugging Face. Las salidas guardadas se generaron en CPU (~12 min); en GPU los números pueden variar levemente.
 
 ---
 
