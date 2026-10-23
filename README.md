@@ -21,26 +21,14 @@ contra un método exacto).
 
 ### Resumen
 
-- **EDA:** longitudes sesgadas a la derecha (mediana 173 palabras, cola hasta 2.470), etiquetas balanceadas y
-  porcentaje de reseñas truncadas según `max_length`.
-- **Tokenizador BPE de 30.000 fragmentos** (cap. 12.5): gráfico del tamaño del vocabulario por iteración; las
-  fusiones se aplican en el orden en que se aprendieron y la puntuación se separa de las palabras.
-- **Atención** (cap. 12.2–12.3): `ScaledDotProductAttention`, `SingleHeadAttention` (Q/K/V) y
-  `MultiHeadAttention`, con máscara de padding y verificada contra `F.scaled_dot_product_attention`.
-- **Capa Transformer** (cap. 12.4): atención + residual + LayerNorm, FFN (ReLU, Dropout) + residual + LayerNorm.
-- **Entrenamiento:** early stopping sobre la precisión de validación, AdamW, warm-up y comparación de 5 tamaños
-  (0,97 M a 10,8 M parámetros).
-- **Evaluación:** precisión por cuartil de longitud; bonus con 2 capas, 4 cabezas y `max_length = 512`:
-  **79,0% en prueba** (no alcanza el 90%; el modelo base provisto da 63,0% y una regresión logística TF-IDF de
-  referencia, 84,4%).
-- **Despliegue:** casos de falla (reseñas muy cortas, sarcasmo, contraste, doble negación) y reseñas en español
-  (BPE no genera `[UNK]`, pero divide las palabras en fragmentos sin significado para el modelo).
+- Tokenizador BPE de 30.000 fragmentos, atención de una y varias cabezas, capa Transformer y early stopping.
+- Dataset completo de IMDB: 26.000 reseñas de entrenamiento, 6.000 de validación y 18.000 de prueba.
+- Prueba: modelo base 82,6%, mejor tamaño (XS) 83,6% y **bonus 88,3%** (2 capas, 4 cabezas, `max_length = 512`);
+  no alcanza el 90%.
 
 ### Reproducir
 
-El notebook corre de principio a fin en Colab (GPU T4 recomendada) y descarga `stanfordnlp/imdb` desde
-Hugging Face. Las salidas guardadas son de una corrida en una GPU T4 de Colab; al re-ejecutar, las cifras del
-entrenamiento pueden variar algunos puntos (dropout en GPU, orden de las sumas y desempates del tokenizador).
+Corre en Colab con GPU T4. Las salidas guardadas son de esa corrida; al re-ejecutar pueden variar levemente.
 
 ---
 

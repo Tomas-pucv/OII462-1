@@ -3,11 +3,14 @@
 El archivo conserva su ID, por lo que el link de Colab sigue siendo el mismo.
 
 Uso:
-    python scripts/subir_notebook_drive.py <file_id> <notebook.ipynb>
+    python scripts/subir_notebook_drive.py <file_id> <notebook.ipynb> [modifiedTime esperado]
 
-Requiere la variable de entorno GDRIVE_SA_KEY con la llave JSON (o el JSON en base64) de una service account
-de Google Cloud con la Drive API habilitada, y el archivo de Drive compartido con el correo de esa cuenta como
-Editor. Cierra la pestaña de Colab del notebook antes de subirlo, para que su autoguardado no lo pise.
+Si se indica el modifiedTime esperado y el archivo de Drive cambió desde entonces, no se sobrescribe.
+
+Requiere la llave JSON de una service account de Google Cloud con la Drive API habilitada, en la variable de
+entorno GDRIVE_SA_KEY (el JSON o el JSON en base64) o en un archivo indicado por GDRIVE_SA_KEY_FILE, y el
+archivo de Drive compartido con el correo de esa cuenta como Editor. Cierra la pestaña de Colab del notebook
+antes de subirlo, para que su autoguardado no lo pise.
 """
 import base64
 import json
@@ -23,16 +26,19 @@ UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files'
 
 
 def load_key():
+    key_file = os.environ.get('GDRIVE_SA_KEY_FILE')
+    if key_file:
+        return json.load(open(key_file))
     raw = os.environ.get('GDRIVE_SA_KEY', '').strip()
     if not raw:
-        sys.exit('Falta la variable de entorno GDRIVE_SA_KEY.')
+        sys.exit('Falta la variable de entorno GDRIVE_SA_KEY o GDRIVE_SA_KEY_FILE.')
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         return json.loads(base64.b64decode(raw))
 
 
-def main(file_id, path):
+def main(file_id, path, expected_modified=None):
     content = open(path, 'rb').read()
     json.loads(content)  # el notebook debe ser JSON válido
 
@@ -51,6 +57,8 @@ def main(file_id, path):
     print(f'Archivo: {meta["name"]} ({meta["mimeType"]}), modificado {meta["modifiedTime"]}')
     if not meta['capabilities']['canEdit']:
         sys.exit(f'Sin permiso de edición: comparte el archivo con {info["client_email"]} como Editor.')
+    if expected_modified and meta['modifiedTime'] != expected_modified:
+        sys.exit(f'El archivo cambió desde {expected_modified}; revísalo antes de sobrescribirlo.')
 
     response = requests.patch(
         f'{UPLOAD_API}/{file_id}', data=content, timeout=300,
@@ -61,4 +69,4 @@ def main(file_id, path):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:4])
