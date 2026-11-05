@@ -237,6 +237,29 @@ def step_ms(name, n):
     return 1e3 * TIMING[name]["dec"][TIMING[name]["n"].index(n)]
 
 
+A_, B_ = "A · sesgo MMR", "B · ISAB"
+HIST = R["histories"]
+TT = R["eval_time_ms"]
+NRUN = len(MODELS) * NSEED
+
+
+def rngn(vals, d=1):
+    lo, hi = num(min(vals), d), num(max(vals), d)
+    return lo if lo == hi else f"{lo}–{hi}"
+
+
+def lose(label, name):
+    return 100 - EV[label][name]["wins_vs_mmr"] - EV[label][name]["ties_vs_mmr"]
+
+
+def glast(name, k=10):
+    return float(np.mean([np.mean(h["val_gap"][-k:]) for h in HIST[name]]))
+
+
+SEC = {n: CONV[n]["sec_per_epoch"] for n in MODELS}
+SMALL = [l for l in SIZES if l in REF2]
+SPREAD = max(max(gm(l, n) for n in MODELS) - min(gm(l, n) for n in MODELS) for l in SIZES)
+BEAT100 = sum(m < gm("100×80", "MMR") for n in MODELS for m in EV["100×80"][n]["seed_means"])
 big = SIZES[-1]
 # ================================================================ 1. portada
 s = prs.slides.add_slide(BLANK)
@@ -270,7 +293,7 @@ SLIDES.append((s, "(≈10 s) Presentamos el rediseño del Transformer del módul
 # ================================================================ 2. base rediseñada
 s = new_slide("ARQUITECTURA", BLUE, "Arquitectura base rediseñada",
               "El encoder solo ve V y p y corre 1 vez por instancia; el decoder integra el estado en cada paso",
-              notes=f"(≈60 s) En el módulo 2, {DIAG['n_dinamicas']} de las 16 features dependían del estado, así que el "
+              notes=f"(≈50 s) En el módulo 2, {DIAG['n_dinamicas']} de las 16 features dependían del estado, así que el "
                     "'encoder' se recalculaba en cada decisión. Ahora el encoder solo recibe la instancia: las armas no "
                     "tienen información propia, así que parten de un token aprendible; los objetivos, de su valor; y la "
                     "matriz p entra como aristas de una atención bipartita armas-objetivos, en el puntaje y en el mensaje. "
@@ -295,14 +318,14 @@ for k, (n, t, d) in enumerate(chg):
 # ================================================================ 3. complejidad
 s = new_slide("COMPLEJIDAD", ORANGE, "Complejidad: encoder 1 vez, decoder lineal en n = W·T",
               "Tiempos medidos con PyTorch en 1 hilo (pesos aleatorios); pendientes log-log en los tamaños más grandes",
-              notes=f"(≈35 s) Con n igual a W por T, el encoder nuevo es lineal en n (la atención es bipartita) y se paga una "
+              notes=f"(≈40 s) Con n igual a W por T, el encoder nuevo es lineal en n (la atención es bipartita) y se paga una "
                     f"vez. El decoder también es lineal: es el mínimo, porque debe entregar un logit por par. El módulo 2 era "
                     f"cuadrático por paso: pendiente {num(SL['Módulo 2'])} contra {num(SL['Base'])} de la base. En 50 por "
                     f"40, una decisión baja de {num(step_ms('Módulo 2', 2000), 0)} a {num(step_ms('Base', 2000), 1)} "
                     f"milisegundos y la instancia completa es {num(SPD['50×40'], 0)} veces más rápida. La única pieza "
                     "cuadrática posible era la interacción entre pares de la variante B, y por eso usa ISAB (curva roja = "
                     "la versión con atención completa).")
-cx = crop(F("complejidad.png"), "complejidad_paso.png", (0.0, 0.0, 0.345, 1.0))
+cx = crop(F("complejidad.png"), "complejidad_paso.png", (0.0, 0.0, 0.328, 1.0))
 image(s, cx, 0.4, 1.35, w=6.3, h=5.5)
 rows = [["", "Encoder (1 vez)", "Decoder (por paso)"],
         ["Módulo 2", "— (todo en cada paso)", "O(W²T) + O(n²·d)"],
@@ -313,7 +336,7 @@ rows = [["", "Encoder (1 vez)", "Decoder (por paso)"],
 table(s, 6.95, 1.45, 6.0, rows, [1.85, 2.05, 2.1], row_h=0.42, size=10.5,
       fills=[PALE["Módulo 2"], PALE["Base"], PALE["A · sesgo MMR"], PALE["B · ISAB"], RGBColor(0xF9, 0xDE, 0xDC)])
 kpi(s, 6.95, 4.25, 1.9, 1.25, num(SL["Módulo 2"]), "pendiente por paso", RGBColor(0x55, 0x55, 0x55), "módulo 2")
-kpi(s, 9.0, 4.25, 1.9, 1.25, num(SL["Base"]), "pendiente por paso", BLUE, "base (≤ 1: lineal)")
+kpi(s, 9.0, 4.25, 1.9, 1.25, num(SL["Base"]), "pendiente por paso", BLUE, "base (≈ 1: lineal)")
 kpi(s, 11.05, 4.25, 1.9, 1.25, f"{num(SPD['50×40'], 0)}×", "más rápida", ORANGE, "instancia 50×40")
 text(s, 6.95, 5.75, 6.0, 1.1,
      [[("Decoder lineal: ", {"bold": True, "color": NAVY}),
@@ -355,7 +378,7 @@ table(s, 8.7, 5.75, 4.1, cob_rows, [2.2, 0.63, 0.63, 0.64], row_h=0.38, size=9.5
 # ================================================================ 5. variante B
 s = new_slide("VARIANTE B", GREEN, "Variante B: decoder con atención eficiente (ISAB)",
               "En cada paso los pares factibles interactúan a través de 16 puntos inductores, en tiempo lineal",
-              notes="(≈35 s) En la base, los pares solo compiten en el softmax final: un par no sabe si otra arma libre "
+              notes="(≈45 s) En la base, los pares solo compiten en el softmax final: un par no sabe si otra arma libre "
                     "aprovecharía mejor su objetivo. La variante B reemplaza el contexto por un bloque ISAB: 16 puntos "
                     "aprendibles resumen a los pares factibles y cada par lee ese resumen; el contexto es el resumen inducido. "
                     "Una self-attention completa entre pares costaría n al cuadrado por paso, lo mismo que el módulo 2; ISAB "
@@ -382,26 +405,55 @@ h0 = {n: CONV[n] for n in MODELS}
 s = new_slide("RESULTADOS", RED, "Convergencia: misma configuración, 3 modelos",
               f"Media de {NSEED} semillas (banda = mínimo–máximo); 6 000 instancias 10×8, Adam + ReduceLROnPlateau, "
               "early stopping",
-              notes="(≈35 s) CONV_NOTES")
+              notes=f"(≈35 s) Entrenamos los tres modelos con la misma configuración y {NSEED} semillas. Sin entrenar, la "
+                    "base y B mandan todas las armas al primer objetivo; A parte exactamente desde MMR. Esa ventaja dura una "
+                    "época: después los tres superan a MMR y las curvas de la base y de A casi coinciden. B es la que baja "
+                    "más rápido la pérdida y termina con la menor, pero su gap de validación queda igual, cerca de 2,3 por "
+                    f"ciento, y cada época le cuesta {num(SEC[B_] / SEC['Base'], 0)} veces más. Las {NRUN} corridas fueron "
+                    "estables, sin divergencias.")
 image(s, F("convergencia.png"), 0.35, 1.35, w=8.3, h=5.6)
 def rng_(v):
     v = [x for x in v if x is not None]
     return "–".join(str(x) for x in sorted({min(v), max(v)})) if v else "—"
 
 
-rows = [["", "Gap val. época 0", "Épocas a loss<0,35", "Mejor loss val.", "Min a gap<3 %"]]
+rows = [["", "Gap val. época 0", "Épocas a loss < 0,35", "Mejor loss val.", "Min a gap<3 %"]]
 for n in MODELS:
-    rows.append([n, pct(h0[n]["gap_init"], 0), rng_(h0[n]["epoch_loss_below_035"]),
+    rows.append([n, pct(h0[n]["gap_init"], 0 if h0[n]["gap_init"] > 100 else 1), rng_(h0[n]["epoch_loss_below_035"]),
                  pm(h0[n]["best_val_loss_mean"], h0[n]["best_val_loss_std"], 3), num(h0[n]["minutes_to_gap3"], 1)])
-table(s, 8.85, 1.45, 4.1, rows, [1.1, 0.62, 0.68, 1.05, 0.65], row_h=0.5, size=9,
+table(s, 8.85, 1.45, 4.1, rows, [0.98, 0.62, 0.82, 1.03, 0.65], row_h=0.5, size=9,
       fills=[PALE[n] for n in MODELS], aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 4)
-text(s, 8.85, 3.6, 4.1, 3.3, "CONV_BULLETS", size=11.5)
+ca, cB = CONV[A_], CONV[B_]
+text(s, 8.85, 3.6, 4.1, 3.3,
+     [[("Inicio: ", {"bold": True, "color": PURPLE, "space_after": 5}),
+       (f"A parte desde MMR ({pct(ca['gap_init'], 1)} vs {pct(h0['Base']['gap_init'], 0)}); tras 1 época los tres ya "
+        "superan a MMR.", {})],
+      [("Pérdida: ", {"bold": True, "color": GREEN, "space_after": 5}),
+       (f"B converge antes y más abajo, con la mayor accuracy ({rngn([100 * x for x in cB['best_val_acc']])} %).", {})],
+      [("Gap: ", {"bold": True, "color": NAVY, "space_after": 5}),
+       (f"los tres terminan parecidos (últimas 10 épocas: {num(glast('Base'))} / {num(glast(A_))} / "
+        f"{num(glast(B_))} %).", {})],
+      [("Costo: ", {"bold": True, "color": RED, "space_after": 5}),
+       (f"B tarda {num(SEC[B_], 1)} s por época vs {rngn([SEC['Base'], SEC[A_]])} s.", {})],
+      [("Estabilidad: ", {"bold": True, "color": NAVY}),
+       (f"{NRUN} corridas sin divergencias; desv. de la mejor pérdida ≤ "
+        f"{num(max(CONV[n]['best_val_loss_std'] for n in MODELS), 3)}.", {})]],
+     size=11.5)
 
 # ================================================================ 7. evaluación por tamaño
 s = new_slide("RESULTADOS", RED, "Evaluación por tamaño: gap vs el experto ILS",
               f"Entrenados solo con 10×8; mismas instancias del módulo 2 (30 por tamaño, 50 en 10×8) × {NSEED} semillas por "
               "arquitectura",
-              notes="(≈45 s) EVAL_NOTES")
+              notes=f"(≈45 s) Los evaluamos sin reentrenar en {len(SIZES)} tamaños, con los {NSEED} modelos de cada "
+                    f"arquitectura. En 10 por 8 los tres quedan entre {num(min(gm('10×8', n) for n in MODELS), 1)} y "
+                    f"{num(max(gm('10×8', n) for n in MODELS), 1)} por ciento, "
+                    f"contra {num(gm('10×8', 'MMR'), 1)} de MMR y {num(REF2['10×8'][0], 1)} del módulo 2. Hasta "
+                    f"{SMALL[-1].replace('×', ' por ')} se mantienen bajo "
+                    f"{num(np.ceil(2 * max(gm(l, n) for l in SMALL for n in MODELS)) / 2, 1)} por ciento y mejoran al "
+                    "módulo 2 en todos los tamaños. En 50 por 40 siguen ganando a MMR, pero en 100 por 80 MMR es casi tan "
+                    "bueno y queda mejor en promedio. Las diferencias entre arquitecturas son del orden de la variación "
+                    f"entre semillas; lo que distingue a B es que logra más soluciones exactas: "
+                    f"{num(EV['10×8'][B_]['pct_optimal'], 0)} por ciento en 10 por 8.")
 rows = [["Tamaño"] + ["Base", "A · MMR", "B · ISAB", "MMR", "Módulo 2"]]
 bold = []
 for r_, l in enumerate(SIZES, start=1):
@@ -417,19 +469,43 @@ table(s, 0.45, 1.45, 7.6, rows, [1.05, 1.32, 1.32, 1.32, 1.32, 1.27], row_h=0.42
       aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 5, bold_cells=bold)
 text(s, 0.45, 1.5 + 0.42 * len(rows), 7.6, 0.35, f"Gap (%) media ± desv. estándar sobre {NSEED} semillas × instancias; en "
      "negrita, el mejor de los tres modelos.", size=10, color=MUTED)
-cx = crop(F("comparacion.png"), "comparacion_der.png", (0.43, 0.0, 1.0, 1.0))
+cx = crop(F("comparacion.png"), "comparacion_der.png", (0.445, 0.0, 1.0, 1.0))
 image(s, cx, 8.2, 1.4, w=4.8, h=3.6)
-text(s, 8.25, 5.1, 4.75, 1.85, "EVAL_BULLETS", size=11.5)
+d10 = EV["10×8"]
+text(s, 8.25, 5.1, 4.75, 1.85,
+     [[("• ", {"space_after": 3}), (f"Superan a MMR hasta 50×40 y al módulo 2 en los {len(SMALL)} tamaños compartidos.", {})],
+      [("• ", {"space_after": 3}),
+       (f"100×80: MMR ({pct(gm('100×80', 'MMR'))}) gana en promedio; {BEAT100} de {NRUN} modelos lo superan.", {})],
+      [("• ", {"space_after": 3}),
+       (f"Diferencias entre arquitecturas ≤ {num(SPREAD, 1)} pp ≈ variación entre semillas.", {})],
+      [("• ", {}), (f"B: {pct(d10[B_]['pct_optimal'], 0)} de soluciones exactas en 10×8 (base "
+                    f"{pct(d10['Base']['pct_optimal'], 0)}, A {pct(d10[A_]['pct_optimal'], 0)}).", {})]],
+     size=11)
 
 # ================================================================ 8. conclusiones
 s = new_slide("CONCLUSIONES", NAVY, "Conclusiones", None,
-              notes="(≈20 s) CONCL_NOTES")
-concl = [("Responsabilidades separadas", "CONCL_1", BLUE),
-         ("Complejidad", "CONCL_2", ORANGE),
-         ("Sesgo inductivo (A)", "CONCL_3", PURPLE),
-         ("ISAB (B)", "CONCL_4", GREEN)]
+              notes=f"(≈20 s) En resumen: separar encoder y decoder cumple la tarea y mejora al módulo 2 con un decoder "
+                    f"lineal, {num(SPD['50×40'], 0)} veces más rápido en 50 por 40. El sesgo de MMR acelera el inicio y la "
+                    "atención ISAB da más soluciones exactas, pero el gap medio final es el mismo: la base es la mejor "
+                    "relación entre calidad y costo.")
+concl = [("Responsabilidades separadas",
+          "El encoder solo ve V y p (token aprendible + aristas) y corre 1 vez; el estado entra al decoder. Sin features "
+          "heurísticas, la base supera a MMR desde la 1.ª época y mejora al módulo 2 en los "
+          f"{len(SMALL)} tamaños compartidos.", BLUE),
+         ("Complejidad",
+          f"Encoder y decoder lineales en n = W·T (pendiente por paso {num(SL['Base'])} vs {num(SL['Módulo 2'])}): "
+          f"{num(SPD['50×40'], 0)}× más rápido por instancia en 50×40. ISAB deja lineal la interacción entre pares "
+          f"({num(SL[B_])} vs {num(SL['B con atención completa'])}). Límite: W pasos por instancia.", ORANGE),
+         ("Sesgo inductivo (A)",
+          f"Parte desde MMR ({pct(ca['gap_init'], 1)} vs {pct(h0['Base']['gap_init'], 0)}) y los α crecen: usa el "
+          "criterio. Pero la base aprende lo mismo en una época y la calidad final es equivalente: acelera el inicio, no "
+          "cambia el resultado.", PURPLE),
+         ("ISAB (B)",
+          f"Menor pérdida y más soluciones exactas ({pct(d10[B_]['pct_optimal'], 0)} vs "
+          f"{rngn([d10['Base']['pct_optimal'], d10[A_]['pct_optimal']], 0)} % en 10×8), pero igual gap medio y "
+          f"{num(SEC[B_] / SEC['Base'], 0)}× más cara por época. Mejor relación calidad/costo: la base.", GREEN)]
 for k, (t, d, col) in enumerate(concl):
-    card(s, 0.6 + (k % 2) * 6.15, 1.35 + (k // 2) * 2.75, 5.95, 2.55, t, d, accent=col, title_size=15, body_size=13)
+    card(s, 0.6 + (k % 2) * 6.15, 1.35 + (k // 2) * 2.75, 5.95, 2.55, t, d, accent=col, title_size=16, body_size=14.5)
 
 for sl, notes in SLIDES:
     sl.notes_slide.notes_text_frame.text = notes

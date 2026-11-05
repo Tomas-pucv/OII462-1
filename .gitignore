@@ -1,0 +1,4 @@
+# temporales de los scripts que generan informes y presentaciones
+figuras*/_tmp*/
+# pesos que guarda el notebook de la Tarea 6 (no se versionan)
+modelos_t6.pt

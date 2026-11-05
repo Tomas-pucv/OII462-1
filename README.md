@@ -4,9 +4,61 @@ Modelos neuronales que aprenden a construir soluciones del **Weapon-Target Assig
 imitando, paso a paso, las decisiones de un algoritmo experto (Búsqueda Local Iterada, verificada
 contra un método exacto).
 
+- **Tarea 6:** encoder estático (1 vez por instancia) con decoder lineal, análisis de complejidad y dos variantes:
+  sesgo inductivo con MMR y decoder con atención eficiente (ISAB).
 - **Proyecto del módulo:** presentación final (13–15 min) del Transformer encoder–decoder con puntero.
 - **Tarea 5:** encoder con self-attention y capa de decisión tipo *pointer* (acciones = pares arma → objetivo).
 - **Tarea 4:** MLP de capas densas (armas en orden fijo).
+
+---
+
+## Tarea 6 — Encoder estático, complejidad y variantes del Transformer
+
+### Entregables
+
+| Entregable | Archivo |
+|---|---|
+| Informe (puntos 1, 2, 3, 5 y 6) | [`Tarea6_WTAP_informe.pdf`](Tarea6_WTAP_informe.pdf) · [`.docx` editable](Tarea6_WTAP_informe.docx) |
+| Notebook (Colab, puntos 2–6) | [`Tarea6_WTAP_variantes.ipynb`](Tarea6_WTAP_variantes.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/charming-allen-rfvy3q/Tarea6_WTAP_variantes.ipynb) |
+| Presentación (punto 7; 8 diapositivas, ≈ 4:45 min, con notas del orador y tiempos) | [`Tarea6_WTAP_presentacion.pptx`](Tarea6_WTAP_presentacion.pptx) · [`Tarea6_WTAP_presentacion.pdf`](Tarea6_WTAP_presentacion.pdf) |
+| Figuras y resultados | [`figuras_t6/`](figuras_t6) (`arq_*.png` de `scripts/make_diagramas_t6.py`; el resto y `resultados.json`, del notebook) |
+
+> El nombre del grupo aparece como `[Nombre(s) del grupo]` en el informe y la presentación: se cambia en la variable
+> `GRUPO` al inicio de `scripts/make_informe_t6.py` y `scripts/make_presentation_t6.py`, y se vuelven a generar.
+> Si la rama se fusiona a `main`, reemplaza `claude/charming-allen-rfvy3q` por `main` en el link de Colab.
+
+### Resumen
+
+- **Rediseño (punto 1):** en el módulo 2, 12 de las 16 features dependían del estado, así que el "encoder" se
+  recalculaba en cada decisión. Ahora el **encoder** solo ve `V_j` y `p_ij` (token aprendible para las armas,
+  embedding de `V_j` para los objetivos y la matriz como aristas de una atención bipartita armas ↔ objetivos) y corre
+  **una vez por instancia**; el **decoder** recibe el estado (armas libres y `q_j`) y puntúa los pares con un puntero
+  aditivo.
+- **Complejidad (punto 2):** con n = W·T, el encoder es O(n·d) y se paga una vez, y el decoder es O(n·d) por paso.
+  Medido en 1 hilo, la pendiente por paso es 1,06 en la base y 2,11 en el módulo 2; una instancia 50×40 se resuelve
+  36 veces más rápido.
+- **Variantes (punto 3):** **A** agrega sesgo inductivo (de salida en el puntero y atencional en el encoder) con la
+  ganancia marginal de MMR `V_j·q_j·p_ij` y pesos α aprendibles; **B** hace interactuar a los pares en cada paso con
+  un bloque **ISAB** de 16 puntos inductores, lineal en n (la self-attention completa sería cuadrática).
+- **Entrenamiento (puntos 4–5):** la misma configuración para los tres modelos (Adam 1e-3 con ReduceLROnPlateau,
+  batch de 32 instancias, máx. 60 épocas con early stopping, 3 semillas). A parte desde la política de MMR; B logra la
+  menor pérdida, pero cada época le cuesta 4,2 veces más.
+- **Evaluación (punto 6):** gap vs el experto ILS en 7 tamaños (5×4 a 100×80), media ± desviación sobre 3 semillas ×
+  instancias. En 10×8: base 2,33 %, A 2,44 %, B 2,21 %, MMR 7,68 % y módulo 2 2,97 %. Los tres mejoran al módulo 2
+  en todos los tamaños compartidos y a MMR hasta 50×40; en 100×80, MMR (1,23 %) queda mejor en promedio.
+
+### Reproducir
+
+El notebook corre de principio a fin en Colab: clona la librería `eda` en la primera celda y usa GPU si está
+disponible. En CPU con 4 hilos tomó 68 min; con `RAPIDO = True` corre en pocos minutos. Los diagramas, el informe y
+la presentación se regeneran a partir de `figuras_t6/`:
+
+```bash
+python scripts/make_diagramas_t6.py
+python scripts/make_informe_t6.py
+python scripts/make_presentation_t6.py
+soffice --headless --convert-to pdf Tarea6_WTAP_informe.docx Tarea6_WTAP_presentacion.pptx
+```
 
 ---
 

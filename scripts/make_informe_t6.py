@@ -164,9 +164,13 @@ def table(rows, widths, header_fill="1B2A41", fills=None, size=9, aligns=None, b
                 cell_text(cell, val, size=size, align=al, bold=r_ in bold_rows)
                 if fills and fills[r_ - 1]:
                     shade(cell, fills[r_ - 1])
-    for row in t.rows:                                   # evita que una fila se parta entre páginas
+    for k, row in enumerate(t.rows):                     # evita que una fila (y la tabla) se parta entre páginas
         trPr = row._tr.get_or_add_trPr()
         cant = OxmlElement("w:cantSplit"); cant.set(qn("w:val"), "true"); trPr.append(cant)
+        if k < len(t.rows) - 1:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    p.paragraph_format.keep_with_next = True
     doc.add_paragraph().paragraph_format.space_after = Pt(2)
     return t
 
@@ -243,6 +247,61 @@ def best_model(label):
     return min(MODELS, key=lambda n: gm(label, n))
 
 
+# ---------------------------------------------------------------- cifras derivadas que cita el texto
+A_, B_ = "A · sesgo MMR", "B · ISAB"
+MAXEP = R["train_cfg"]["max_epochs"]
+NRUN = len(MODELS) * NSEED
+TT = R["eval_time_ms"]
+
+
+def gwin(name, a, b_):
+    """Gap de validación medio entre las épocas a y b_ (1 = primera época), promedio de las semillas."""
+    return float(np.mean([np.mean(h["val_gap"][a - 1:b_]) for h in HIST[name]]))
+
+
+def glast(name, k=10):
+    return float(np.mean([np.mean(h["val_gap"][-k:]) for h in HIST[name]]))
+
+
+def rngn(vals, d=1):
+    lo, hi = num(min(vals), d), num(max(vals), d)
+    return lo if lo == hi else f"{lo}–{hi}"
+
+
+def lose(label, name):
+    return 100 - EV[label][name]["wins_vs_mmr"] - EV[label][name]["ties_vs_mmr"]
+
+
+def seed_rng(label, name):
+    sm = EV[label][name]["seed_means"]
+    return max(sm) - min(sm)
+
+
+def lista(xs):
+    xs = list(xs)
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
+
+
+EP1 = [h["val_gap"][0] for n in MODELS for h in HIST[n]]
+ACC0_A = HIST[A_][0]["init"]["val_acc"]
+EARLY = sum(len(h["val_gap"]) < MAXEP for n in MODELS for h in HIST[n])
+FULL_BEST = [CONV[n]["best_epoch"][s] for n in MODELS for s, h in enumerate(HIST[n]) if len(h["val_gap"]) == MAXEP]
+ALPHA_BEST = [h["alpha"][h["best_epoch"] - 1] for h in HIST[A_]]
+AENC = np.array(R["alpha_enc"])                              # (capa, dirección: 0 armas→obj., 1 obj.→armas, cabeza)
+AMAX = np.unravel_index(AENC.argmax(), AENC.shape)
+SMALL = [l for l in SIZES if l in REF2]                       # tamaños compartidos con el módulo 2 (hasta 30×20)
+SPREAD = {l: max(gm(l, n) for n in MODELS) - min(gm(l, n) for n in MODELS) for l in SIZES}
+SEED_STD = [EV[l][n]["seed_std"] for l in SIZES for n in MODELS]
+BEAT_MMR = {l: {n: sum(m < gm(l, "MMR") for m in EV[l][n]["seed_means"]) for n in MODELS} for l in SIZES}
+WINNERS = {n: [l for l in SIZES if best_model(l) == n] for n in MODELS}
+B_MOST_VAR = [l for l in SIZES if max(MODELS, key=lambda n: EV[l][n]["seed_std"]) == B_]
+N_LARGEST = int(TIMING["Base"]["n"][-1])
+LARGEST = f"{int(TIMING['Base']['W'][-1])}×{N_LARGEST // int(TIMING['Base']['W'][-1])}"
+SL_SIN = {n: float(np.polyfit(np.log(TIMING[n]["n"][-5:-1]), np.log(TIMING[n]["dec"][-5:-1]), 1)[0]) for n in TIMING}
+SEC = {n: CONV[n]["sec_per_epoch"] for n in MODELS}
+TRAIN_MIN = {n: sum(CONV[n]["train_minutes"]) for n in MODELS}
+
+
 # ================================================================ portada / encabezado
 para([("OII462 · Tarea 6", {"bold": True, "color": BLUE, "size": 10})], space_after=0)
 para([("Encoder estático, complejidad y variantes del Transformer para el WTAP", {"bold": True, "color": NAVY, "size": 19})],
@@ -264,7 +323,14 @@ para([b("Resumen. "),
       (", que re-contextualiza los pares en cada paso con un bloque ISAB de costo lineal. Una decisión de 50×40 pasa de "
        f"{num(1e3 * TIMING['Módulo 2']['dec'][TIMING['Módulo 2']['n'].index(2000)], 1)} ms a "
        f"{num(1e3 * TIMING['Base']['dec'][TIMING['Base']['n'].index(2000)], 2)} ms. ", {}),
-      ("RESUMEN_RESULTADOS", {})])
+      (f"Con la misma configuración y {NSEED} semillas por modelo, los tres superan a MMR desde la primera época de "
+       f"entrenamiento. En las 50 instancias de prueba 10×8 logran gaps de {pct(gm(t10, 'Base'))} (base), "
+       f"{pct(gm(t10, A_))} (A) y {pct(gm(t10, B_))} (B), frente a {pct(gm(t10, 'MMR'))} de MMR y "
+       f"{pct(REF2[t10][0])} del módulo 2. Entrenados solo con 10×8, mejoran al módulo 2 en todos los tamaños que comparten "
+       f"(hasta {SMALL[-1]}) y a MMR hasta 50×40; en 100×80, MMR ({pct(gm('100×80', 'MMR'))}) queda mejor en promedio. "
+       f"A parte desde la política de MMR, y B obtiene la menor pérdida de validación y más soluciones iguales a las del "
+       f"experto, pero cada época le cuesta {num(SEC[B_] / SEC['Base'], 1)} veces más. Las diferencias de gap medio entre "
+       "las tres arquitecturas son del orden de la variación entre semillas.", {})])
 
 # ================================================================ 1. rediseño
 doc.add_heading("1. Rediseño de la arquitectura (punto 1)", level=1)
@@ -360,9 +426,15 @@ table([["Modelo", "Pendiente por paso", "Pendiente del encoder", "Pendiente por 
 para([b("Lectura. "),
       (f"Las pendientes confirman el análisis: el paso del módulo 2 y el de B con self-attention completa crecen como n² "
        f"(pendientes {num(SL['Módulo 2'])} y {num(SL['B con atención completa'])}), mientras que el de los tres modelos "
-       f"nuevos crece a lo más linealmente (pendientes {num(SL['Base'])}, {num(SL['A · sesgo MMR'])} y {num(SL['B · ISAB'])}; "
-       "en tamaños pequeños domina el costo fijo de lanzar las operaciones, por eso la pendiente queda bajo 1). El encoder "
-       f"cuesta {num(1e3 * TIMING['Base']['enc'][k10], 2)} ms en 10×8 y se paga una sola vez. Por instancia, la base es "
+       f"nuevos crece de forma aproximadamente lineal (pendientes {num(SL['Base'])}, {num(SL['A · sesgo MMR'])} y "
+       f"{num(SL['B · ISAB'])}). Lo que excede a 1 viene del tamaño más grande ({LARGEST}, n = {miles(N_LARGEST)}), "
+       "probablemente porque allí los tensores de un paso dejan de caber en la caché del procesador: sin ese punto, las "
+       f"pendientes son {num(SL_SIN['Base'])}, {num(SL_SIN['A · sesgo MMR'])} y {num(SL_SIN['B · ISAB'])}. Con el mismo "
+       f"criterio, las del módulo 2 y de B con atención completa quedan en {num(SL_SIN['Módulo 2'])} y "
+       f"{num(SL_SIN['B con atención completa'])}, todavía claramente superlineales. El encoder queda bajo 1 "
+       f"(pendientes {rngn([SLE[n] for n in MODELS], 2)}) porque en los tamaños medidos todavía pesa el costo fijo de lanzar "
+       f"las operaciones. Cuesta {num(1e3 * TIMING['Base']['enc'][k10], 2)} ms en 10×8 y se paga una sola vez. Por "
+       "instancia, la base es "
        f"{num(SPD['10×8'], 1)} veces más rápida que el módulo 2 en 10×8 y {num(SPD['50×40'], 0)} veces en 50×40.", {})])
 
 # ================================================================ 3. variantes
@@ -457,7 +529,42 @@ table(rows, [2.5, 1.6, 1.8, 1.9, 1.5, 2.5, 2.0, 1.3, 1.9], size=8.3, fills=[FILL
 para([("Épocas: rango entre las semillas. Oscilación del gap: promedio de |Δ gap de validación| entre épocas consecutivas en "
        "las últimas 10 épocas, en puntos porcentuales. Minutos: tiempo de reloj medio hasta el primer gap de validación "
        "< 3 % (CPU, incluye la validación de cada época).", {"italic": True, "color": MUTED, "size": 9})])
-para([b("Análisis. "), ("ANALISIS_CONVERGENCIA", {})])
+cb, ca, cB = CONV["Base"], CONV[A_], CONV[B_]
+para([b("Punto de partida. "),
+      (f"Sin entrenar, la base y B tienen logits constantes (W_r = 0), así que el rollout greedy asigna todas las armas al "
+       f"primer objetivo (gap {pct(cb['gap_init'], 0)}). Gracias al sesgo de salida, A parte exactamente desde la política "
+       f"de MMR (gap {pct(ca['gap_init'], 1)} y accuracy {pct(100 * ACC0_A, 0)}).", {})])
+para([b("Velocidad. "),
+      (f"La ventaja inicial de A dura una época: tras la primera, los tres modelos ya superan a MMR (gap de validación "
+       f"{rngn(EP1)} %) y las curvas de la base y de A casi coinciden (gap medio de las épocas 1–10: "
+       f"{num(gwin('Base', 1, 10))} % y {num(gwin(A_, 1, 10))} %; B {num(gwin(B_, 1, 10))} %). Medida en épocas, A llega "
+       f"a un gap < 3 % en {lst(ca['epoch_gap_below_3'])}, la base en {lst(cb['epoch_gap_below_3'])} y B en "
+       f"{lst(cB['epoch_gap_below_3'])}. En la pérdida el orden cambia: B es la que baja más rápido (pérdida < 0,35 en "
+       f"{lst(cB['epoch_loss_below_035'])} épocas, contra {lst(ca['epoch_loss_below_035'])} de A y "
+       f"{lst(cb['epoch_loss_below_035'])} de la base) y la que termina más abajo, con la mayor accuracy de validación "
+       f"({rngn([100 * x for x in cB['best_val_acc']])} % frente a "
+       f"{rngn([100 * x for x in cb['best_val_acc'] + ca['best_val_acc']])} %). En tiempo de reloj, en cambio, una época "
+       f"de B cuesta {num(SEC[B_] / SEC['Base'], 1)} veces más ({num(SEC[B_], 1)} s frente a "
+       f"{rngn([SEC['Base'], SEC[A_]])} s): necesita {num(cB['minutes_to_gap3'], 1)} min para llegar a un gap < 3 %, "
+       f"contra {rngn([cb['minutes_to_gap3'], ca['minutes_to_gap3']])} min de la base y de A, y sus {NSEED} semillas "
+       f"tomaron {num(TRAIN_MIN[B_], 0)} min de entrenamiento, contra {rngn([TRAIN_MIN['Base'], TRAIN_MIN[A_]], 0)} min.",
+       {})])
+para([b("Estabilidad. "),
+      (f"Las {NRUN} corridas convergen sin divergencias: la mejor pérdida de validación varía poco entre semillas "
+       f"(desviación {rngn([CONV[n]['best_val_loss_std'] for n in MODELS], 3)}) y, en el tramo final, la pérdida oscila "
+       f"≈ {num(np.mean([CONV[n]['oscillation'] for n in MODELS]), 3)} entre épocas. El gap del rollout es más ruidoso "
+       f"({rngn([CONV[n]['oscillation_gap'] for n in MODELS], 2)} pp entre épocas consecutivas; la base es la más "
+       "estable) porque depende de unas pocas decisiones críticas por instancia. Por lo mismo, la menor pérdida de B no se "
+       "traduce en un menor gap de validación: los tres terminan en niveles parecidos (media de las últimas 10 épocas: base "
+       f"{num(glast('Base'))} %, A {num(glast(A_))} % y B {num(glast(B_))} %). El early stopping "
+       f"se activó en {EARLY} de las {NRUN} corridas; las otras {len(FULL_BEST)} llegaron al máximo de {MAXEP} épocas con "
+       f"la mejor época entre la {min(FULL_BEST)} y la {max(FULL_BEST)}, es decir, todavía mejoraban levemente. Como el "
+       "presupuesto es el mismo para los tres modelos, la comparación es justa.", {})])
+para([b("Pesos α de la variante A (Figura 6). "),
+      (f"El peso del sesgo de salida crece de 1 a {rngn(ALPHA_BEST)} y {int((AENC > 0).sum())} de los {AENC.size} pesos "
+       f"del sesgo atencional (semilla 0) terminan positivos; el mayor ({num(AENC.max())}) está en la capa {AMAX[0] + 1}, "
+       f"en la atención {('de cada arma sobre los objetivos', 'de cada objetivo sobre las armas')[AMAX[1]]}. El modelo usa "
+       "el criterio de MMR en el encoder y en el decoder, y le da cada vez más peso.", {})])
 if os.path.exists(F("alpha.png")):
     figure(F("alpha.png"), TEXT_W * 0.9,
            "Figura 6. Variante A: evolución del peso α del sesgo de salida y pesos del sesgo atencional aprendidos (semilla 0).")
@@ -518,12 +625,102 @@ if REFL:
           ("Repetimos el ILS con 2 000 iteraciones y perturbación proporcional a W en los tres tamaños más grandes:", {})],
          keep=True)
     table(rows, [1.7, 3.6, 2.6, 2.7, 2.6, 2.6], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
-para([b("Análisis. "), ("ANALISIS_EVALUACION", {})])
+TCOLS = MODELS + ["MMR", "Experto ILS"]
+para([b("Tiempo de inferencia. "),
+      ("Milisegundos por instancia, con el rollout por lotes en CPU (todos los hilos; modelos de la semilla 0):", {})],
+     keep=True)
+def ms(v):
+    return miles(int(round(v))) if v >= 100 else num(v, 2 if v < 10 else 1)
+
+
+table([["Tamaño"] + TCOLS] + [[l] + [ms(TT[l][n]) for n in TCOLS] for l in SIZES],
+      [2.0, 2.6, 2.6, 2.6, 2.4, 2.6], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
+
+l50, l100 = "50×40", "100×80"
+gap_mod2 = {l: [REF2[l][0] - gm(l, n) for n in MODELS] for l in SMALL}
+mmr_small = [gm(l, "MMR") for l in SMALL]
+models_small = [gm(l, n) for l in SMALL for n in MODELS]
+para([b("Análisis — tamaño de entrenamiento (10×8). "),
+      (f"Los tres modelos superan a MMR por al menos {num(gm(t10, 'MMR') - max(gm(t10, n) for n in MODELS), 1)} pp "
+       f"({rngn([gm(t10, n) for n in MODELS], 2)} % frente a {pct(gm(t10, 'MMR'))}) y al modelo del módulo 2 "
+       f"({pct(REF2[t10][0])}), que además recibía features heurísticas. Sus medias son muy parecidas: la diferencia "
+       f"máxima ({num(SPREAD[t10])} pp) es menor que la variación entre semillas de una misma arquitectura (hasta "
+       f"{num(max(seed_rng(t10, n) for n in MODELS))} pp, en {max(MODELS, key=lambda n: seed_rng(t10, n)).split(' ·')[0]}). "
+       f"La distribución sí cambia: B iguala al experto en el {pct(d10[B_]['pct_optimal'], 0)} de las ejecuciones (base "
+       f"{pct(d10['Base']['pct_optimal'], 0)}, A {pct(d10[A_]['pct_optimal'], 0)}), su mediana es "
+       f"{pct(d10[B_]['median'])} (base {pct(d10['Base']['median'])}, A {pct(d10[A_]['median'])}) y pierde contra MMR solo "
+       f"en el {pct(lose(t10, B_), 0)} de los casos (base {pct(lose(t10, 'Base'), 0)}, A {pct(lose(t10, A_), 0)}). Su media "
+       "no mejora porque, cuando se equivoca, lo hace por montos parecidos a los de los otros modelos.", {})])
+para([b("Generalización de tamaño. "),
+      (f"Entrenados solo con 10×8, los tres modelos se mantienen entre {pct(min(models_small), 1)} y "
+       f"{pct(max(models_small), 1)} hasta {SMALL[-1]}, mientras MMR queda entre {pct(min(mmr_small), 1)} y "
+       f"{pct(max(mmr_small), 1)}. Mejoran al módulo 2 en todos los tamaños compartidos: por "
+       f"{rngn(gap_mod2['5×4'] + gap_mod2[t10])} pp en 5×4 y 10×8, y por "
+       f"{rngn([x for l in SMALL[2:] for x in gap_mod2[l]])} pp en {lista(SMALL[2:])}, donde el modelo anterior se "
+       "degradaba más.", {})])
+n50 = sum(BEAT_MMR[l50].values())
+para([b("Instancias grandes. "),
+      (f"En {l50} y {l100}, MMR mejora mucho ({pct(gm(l50, 'MMR'))} y {pct(gm(l100, 'MMR'))}) y la referencia se "
+       f"debilita: un ILS de 2 000 iteraciones mejora al de referencia en {pct(REFL[l50]['mejora_ils_largo'])} y "
+       f"{pct(REFL[l100]['mejora_ils_largo'])}. " +
+       ("Todos los modelos entrenados" if n50 == NRUN else f"{n50} de los {NRUN} modelos entrenados") +
+       f" superan a MMR en {l50}, pero en {l100} MMR queda mejor que la media de las tres arquitecturas "
+       f"({rngn([gm(l100, n) for n in MODELS], 2)} %) y solo {sum(BEAT_MMR[l100].values())} de los {NRUN} modelos lo "
+       "superan" + (" (uno por arquitectura)" if set(BEAT_MMR[l100].values()) == {1} else "") +
+       ". Medido contra el ILS largo (tabla anterior), el orden de los métodos no cambia.", {})])
+para([b("Diferencias entre arquitecturas. "),
+      (f"En cada tamaño, las medias de las tres arquitecturas difieren en a lo más {num(max(SPREAD.values()), 1)} pp, del "
+       f"mismo orden que la variación entre semillas (desviación de {num(min(SEED_STD), 1)} a {num(max(SEED_STD), 1)} pp), "
+       f"así que ninguna domina. La base es la mejor en {len(WINNERS['Base'])} de los {len(SIZES)} tamaños "
+       f"({lista(WINNERS['Base'])}) y B en {len(WINNERS[B_])} ({lista(WINNERS[B_])}); en {l100}, B gana a MMR en el "
+       f"{pct(EV[l100][B_]['wins_vs_mmr'], 0)} de las ejecuciones, contra "
+       f"{rngn([EV[l100][n]['wins_vs_mmr'] for n in ('Base', A_)], 0)} % de la base y A. A queda a ±"
+       f"{num(max(abs(gm(l, A_) - gm(l, 'Base')) for l in SIZES), 1)} pp de la base en todos los tamaños. B es la más "
+       f"sensible a la semilla en {lista(B_MOST_VAR)} (rangos " +
+       " y ".join(f"{rngn(EV[l][B_]['seed_means'], 2)} %" for l in B_MOST_VAR) + ").", {})])
+para([b("Tiempo. "),
+      (f"En 10×8 los modelos resuelven una instancia en {rngn([TT[t10][n] for n in MODELS])} ms, entre "
+       f"{num(min(TT[t10]['Experto ILS'] / TT[t10][n] for n in MODELS), 0)} y "
+       f"{num(max(TT[t10]['Experto ILS'] / TT[t10][n] for n in MODELS), 0)} veces más rápido que el ILS "
+       f"({num(TT[t10]['Experto ILS'], 1)} ms). Pero el rollout son W pasos de costo O(n·d): en {l100} tarda "
+       f"{rngn([TT[l100]['Base'], TT[l100][A_]], 0)} ms con la base y A, y {num(TT[l100][B_] / 1e3, 1)} s con B, más que el "
+       f"ILS de 100 iteraciones ({num(TT[l100]['Experto ILS'], 0)} ms).", {})])
 
 # ================================================================ 7. conclusiones
 doc.add_heading("7. Conclusiones", level=1)
-for txt in ["CONCLUSION_1", "CONCLUSION_2", "CONCLUSION_3", "CONCLUSION_4"]:
-    bullet([(txt, {})])
+bullet([b("Responsabilidades separadas. "),
+        ("El rediseño cumple la definición de la tarea: el encoder solo ve V", {}), ("j", {"sub": True}), (" y p", {}),
+        ("ij", {"sub": True}),
+        (" (token aprendible para las armas y la matriz como aristas) y corre una vez por instancia; el estado entra solo "
+         "al decoder. Sin las features heurísticas "
+         "del módulo 2, la base supera a MMR desde la primera época y mejora al módulo 2 en los "
+         f"{len(SMALL)} tamaños compartidos ({pct(gm(t10, 'Base'))} frente a {pct(REF2[t10][0])} en 10×8; "
+         f"{rngn([gm(l, 'Base') for l in SMALL[2:]], 2)} % frente a {rngn([REF2[l][0] for l in SMALL[2:]], 2)} % entre "
+         f"{SMALL[2]} y {SMALL[-1]}).", {})])
+bullet([b("Complejidad. "),
+        (f"El encoder es lineal en n = W·T (atención bipartita) y se paga una vez; el decoder es lineal por paso (pendiente "
+         f"medida {num(SL['Base'])} frente a {num(SL['Módulo 2'])} del módulo 2), así que una instancia 50×40 se resuelve "
+         f"{num(SPD['50×40'], 0)} veces más rápido que con el modelo anterior. La interacción entre pares de la variante B "
+         f"sería cuadrática (pendiente {num(SL['B con atención completa'])}) y con ISAB queda lineal (pendiente "
+         f"{num(SL[B_])}, o {num(SL_SIN[B_])} sin el tamaño más grande). El límite que queda es el número de pasos: W pasos "
+         "de O(n·d) por instancia, que en 100×80 ya "
+         "es más lento que el ILS.", {})])
+bullet([b("Sesgo inductivo (A). "),
+        (f"Con la ganancia de MMR como sesgo, el modelo parte desde MMR ({pct(ca['gap_init'], 1)} en vez de "
+         f"{pct(cb['gap_init'], 0)}), llega un poco antes a los umbrales (gap < 3 % en {lst(ca['epoch_gap_below_3'])} "
+         f"épocas frente a {lst(cb['epoch_gap_below_3'])}) y los α aprendidos crecen, así que el modelo sí usa el criterio. "
+         "Pero la base aprende lo mismo en una época y la calidad final es equivalente (diferencias de a lo más "
+         f"{num(max(abs(gm(l, A_) - gm(l, 'Base')) for l in SIZES), 1)} pp, dentro de la variación entre semillas): en "
+         "este problema, el sesgo acelera el inicio pero no cambia el resultado final.", {})])
+bullet([b("Atención eficiente (B). "),
+        (f"Que los pares interactúen con ISAB da la menor pérdida, la mayor accuracy y más soluciones exactas "
+         f"({pct(d10[B_]['pct_optimal'], 0)} iguales al experto en 10×8 y solo {pct(lose(t10, B_), 0)} de derrotas contra "
+         f"MMR), pero no un menor gap medio, y cuesta {num(SEC[B_] / SEC['Base'], 0)} veces más por época y hasta "
+         f"{num(TT['100×80'][B_] / TT['100×80']['Base'], 0)} veces más en inferencia.", {})])
+bullet([b("Recomendación. "),
+        ("Con estos datos, la base es la mejor relación entre calidad y costo; A conviene si el presupuesto de "
+         "entrenamiento es muy corto (parte desde MMR) y B si importa resolver exactamente más instancias. Como trabajo "
+         "futuro, proponemos entrenar con varios tamaños (en 50×40 y 100×80 MMR se acerca) y combinar A y B.", {})])
 
 doc.add_heading("Referencias", level=1)
 refs = ["Ahuja, R. K., Kumar, A., Jha, K. C. y Orlin, J. B. (2007). Exact and heuristic algorithms for the weapon-target "
