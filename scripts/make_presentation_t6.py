@@ -382,17 +382,23 @@ s = new_slide("RESULTADOS", RED, "Convergencia: misma configuración, 3 modelos"
               "early stopping",
               notes="(≈35 s) CONV_NOTES")
 image(s, F("convergencia.png"), 0.35, 1.35, w=8.3, h=5.6)
-rows = [["", "Gap val. época 0", "Mejor época", "Loss val. (mejor)", "s/época"]]
+def rng_(v):
+    v = [x for x in v if x is not None]
+    return "–".join(str(x) for x in sorted({min(v), max(v)})) if v else "—"
+
+
+rows = [["", "Gap val. época 0", "Épocas a loss < 0,35", "Mejor loss val.", "Min a gap < 3 %"]]
 for n in MODELS:
-    rows.append([n, pct(h0[n]["gap_init"], 1), "–".join(str(x) for x in sorted({min(h0[n]["best_epoch"]), max(h0[n]["best_epoch"])})),
-                 pm(h0[n]["best_val_loss_mean"], h0[n]["best_val_loss_std"], 3), num(h0[n]["sec_per_epoch"], 1)])
-table(s, 8.85, 1.45, 4.1, rows, [1.25, 0.8, 0.65, 0.85, 0.55], row_h=0.5, size=9,
+    rows.append([n, pct(h0[n]["gap_init"], 0), rng_(h0[n]["epoch_loss_below_035"]),
+                 pm(h0[n]["best_val_loss_mean"], h0[n]["best_val_loss_std"], 3), num(h0[n]["minutes_to_gap3"], 1)])
+table(s, 8.85, 1.45, 4.1, rows, [1.2, 0.72, 0.75, 0.83, 0.6], row_h=0.5, size=9,
       fills=[PALE[n] for n in MODELS], aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 4)
 text(s, 8.85, 3.6, 4.1, 3.3, "CONV_BULLETS", size=11.5)
 
 # ================================================================ 7. evaluación por tamaño
 s = new_slide("RESULTADOS", RED, "Evaluación por tamaño: gap vs el experto ILS",
-              "Entrenados solo con 10×8; mismas instancias del módulo 2 (30 por tamaño, 50 de prueba en 10×8)",
+              f"Entrenados solo con 10×8; mismas instancias del módulo 2 (30 por tamaño, 50 en 10×8) × {NSEED} semillas por "
+              "arquitectura",
               notes="(≈45 s) EVAL_NOTES")
 rows = [["Tamaño"] + ["Base", "A · MMR", "B · ISAB", "MMR", "Módulo 2"]]
 bold = []
@@ -407,8 +413,8 @@ for r_, l in enumerate(SIZES, start=1):
     rows.append(row)
 table(s, 0.45, 1.45, 7.6, rows, [1.05, 1.32, 1.32, 1.32, 1.32, 1.27], row_h=0.42, size=10.5,
       aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 5, bold_cells=bold)
-text(s, 0.45, 1.5 + 0.42 * len(rows), 7.6, 0.35, "Gap (%) media ± desv. estándar entre instancias; en negrita, el mejor de "
-     "los tres modelos.", size=10, color=MUTED)
+text(s, 0.45, 1.5 + 0.42 * len(rows), 7.6, 0.35, f"Gap (%) media ± desv. estándar sobre {NSEED} semillas × instancias; en "
+     "negrita, el mejor de los tres modelos.", size=10, color=MUTED)
 cx = crop(F("comparacion.png"), "comparacion_der.png", (0.43, 0.0, 1.0, 1.0))
 image(s, cx, 8.2, 1.4, w=4.8, h=3.6)
 text(s, 8.25, 5.1, 4.75, 1.85, "EVAL_BULLETS", size=11.5)

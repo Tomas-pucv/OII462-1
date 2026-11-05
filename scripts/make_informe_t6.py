@@ -259,12 +259,10 @@ para([b("Resumen. "),
       (" (token aprendible para las armas y la matriz como aristas) y que corre una vez por instancia, y un decoder que "
        "integra el estado y es lineal en n = W·T por paso. Sobre esa base proponemos dos variantes: ", {}),
       b("A"), (", con sesgo inductivo (de salida y atencional) basado en la ganancia marginal de MMR, y ", {}), b("B"),
-      (", que re-contextualiza los pares en cada paso con un bloque ISAB de costo lineal. Entrenados con la misma "
-       f"configuración y {NSEED} semillas, los tres modelos superan a MMR en todos los tamaños evaluados; en la prueba 10×8 "
-       f"los gaps son {pct(gm(t10, 'Base'))} (base), {pct(gm(t10, 'A · sesgo MMR'))} (A) y {pct(gm(t10, 'B · ISAB'))} (B), "
-       f"frente a {pct(gm(t10, 'MMR'))} de MMR. Una decisión de 50×40 pasa de "
+      (", que re-contextualiza los pares en cada paso con un bloque ISAB de costo lineal. Una decisión de 50×40 pasa de "
        f"{num(1e3 * TIMING['Módulo 2']['dec'][TIMING['Módulo 2']['n'].index(2000)], 1)} ms a "
-       f"{num(1e3 * TIMING['Base']['dec'][TIMING['Base']['n'].index(2000)], 2)} ms.", {})])
+       f"{num(1e3 * TIMING['Base']['dec'][TIMING['Base']['n'].index(2000)], 2)} ms. ", {}),
+      ("RESUMEN_RESULTADOS", {})])
 
 # ================================================================ 1. rediseño
 doc.add_heading("1. Rediseño de la arquitectura (punto 1)", level=1)
@@ -445,17 +443,18 @@ def lst(v):
     return "–".join(str(x) for x in (sorted(set(v)) if len(set(v)) <= 1 else [min(v), max(v)])) if v else "no alcanza"
 
 
-rows = [["Modelo", "Gap val. época 0", "Época con gap < MMR", "Época con acc ≥ 0,85", "Mejor época",
-         "Pérdida val. mejor (media ± desv.)", "Oscilación", "s / época"]]
+rows = [["Modelo", "Gap val. época 0", "Épocas hasta gap < 3 %", "Épocas hasta pérdida < 0,35", "Mejor época",
+         "Mejor pérdida val. (media ± desv.)", "Oscilación del gap (pp)", "s / época", "Minutos hasta gap < 3 %"]]
 for n in MODELS:
     cv = CONV[n]
-    rows.append([n, pct(cv["gap_init"], 1), lst(cv["epoch_gap_below_mmr"]), lst(cv["epoch_acc_085"]), lst(cv["best_epoch"]),
-                 pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3), num(cv["oscillation"], 4),
-                 num(cv["sec_per_epoch"], 1)])
-table(rows, [2.6, 1.9, 2.0, 2.0, 1.7, 3.1, 1.8, 1.5], size=8.5, fills=[FILL[n] for n in MODELS],
-      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 7)
-para([("La oscilación es el promedio de |Δ pérdida de validación| en las últimas 10 épocas (rango entre semillas cuando "
-       "difieren).", {"italic": True, "color": MUTED, "size": 9})])
+    rows.append([n, pct(cv["gap_init"], 1), lst(cv["epoch_gap_below_3"]), lst(cv["epoch_loss_below_035"]),
+                 lst(cv["best_epoch"]), pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3),
+                 num(cv["oscillation_gap"], 2), num(cv["sec_per_epoch"], 1), num(cv["minutes_to_gap3"], 1)])
+table(rows, [2.5, 1.6, 1.8, 1.9, 1.6, 2.6, 1.8, 1.4, 1.9], size=8.3, fills=[FILL[n] for n in MODELS],
+      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 8)
+para([("Épocas: rango entre las semillas. Oscilación del gap: promedio de |Δ gap de validación| entre épocas consecutivas en "
+       "las últimas 10 épocas, en puntos porcentuales. Minutos: tiempo de reloj medio hasta el primer gap de validación "
+       "< 3 % (CPU, incluye la validación de cada época).", {"italic": True, "color": MUTED, "size": 9})])
 para([b("Análisis. "), ("ANALISIS_CONVERGENCIA", {})])
 if os.path.exists(F("alpha.png")):
     figure(F("alpha.png"), TEXT_W * 0.9,
@@ -466,9 +465,11 @@ doc.add_heading("6. Evaluación con instancias de distintos tamaños (punto 6)",
 para([("Los modelos se entrenaron solo con 10×8 y se evalúan sin cambios en ", {}), (f"{len(SIZES)} tamaños", {"bold": True}),
       (", con las mismas instancias del proyecto del módulo 2 (30 por tamaño; las 50 de prueba en 10×8), de modo que la columna "
        "\"Módulo 2\" es directamente comparable; 50×40 y 100×80 son nuevos. La referencia es el experto ILS de las tareas "
-       "anteriores (óptimo en todas las instancias verificadas de 5×4 y 10×8): gap = 100·(costo/costo ILS − 1). Se evalúa el "
-       "modelo de la semilla 0 de cada arquitectura con el rollout greedy (idéntico al GreedyAgent de eda, verificado).", {})])
-hdr = ["Tamaño", "n"] + MODELS + ["MMR", "Aleatorio", "Módulo 2"]
+       "anteriores (óptimo en todas las instancias verificadas de 5×4 y 10×8): gap = 100·(costo/costo ILS − 1). Se evalúan "
+       f"los {NSEED} modelos entrenados de cada arquitectura (una por semilla) con el rollout greedy, que verificamos idéntico "
+       f"al GreedyAgent de eda; la tabla reporta la media y la desviación estándar sobre las {NSEED} semillas × las "
+       "instancias de cada tamaño, y más abajo se muestra la variación entre semillas.", {})])
+hdr = ["Tamaño", "W·T"] + MODELS + ["MMR", "Aleatorio", "Módulo 2"]
 rows = [hdr]
 for l in SIZES:
     Wl, Tl = map(int, l.split("×"))
@@ -481,17 +482,31 @@ for l in SIZES:
     rows.append(row)
 table(rows, [1.6, 1.1, 2.4, 2.4, 2.4, 2.3, 2.6, 2.3], size=8.5,
       aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 7)
-para([("Gap vs el experto ILS (%), media ± desviación estándar entre instancias; en negrita, el mejor de los tres modelos en "
-       "cada tamaño.", {"italic": True, "color": MUTED, "size": 9})])
-figure(F("tamanos.png"), TEXT_W, "Figura 7. Gap medio por tamaño (barras de error: ±1 desviación estándar).")
+para([(f"Gap vs el experto ILS (%), media ± desviación estándar sobre {NSEED} semillas × instancias (MMR y el constructivo "
+       "aleatorio son deterministas: solo instancias); en negrita, el mejor de los tres modelos en cada tamaño. La columna "
+       "Módulo 2 es un único modelo, evaluado en las mismas instancias.", {"italic": True, "color": MUTED, "size": 9})])
+rows = [["Tamaño"] + [f"{n}: media ± desv. entre semillas (rango)" for n in MODELS]]
+for l in SIZES:
+    row = [l]
+    for n in MODELS:
+        sm = EV[l][n]["seed_means"]
+        row.append(f"{pm(np.mean(sm), np.std(sm))}  ({num(min(sm))}–{num(max(sm))})")
+    rows.append(row)
+para([b("Variación entre semillas. "),
+      ("Gap medio de cada uno de los modelos entrenados, resumido por arquitectura:", {})], keep=True)
+table(rows, [1.8, 5.2, 5.2, 5.2], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 3)
+figure(F("tamanos.png"), TEXT_W,
+       f"Figura 7. Gap medio por tamaño: barras = media de {NSEED} semillas × instancias, barras de error = ±1 desviación "
+       "estándar, puntos negros = gap medio de cada semilla.")
 figure(F("comparacion.png"), TEXT_W,
-       "Figura 8. Izquierda: distribución del gap en las 50 instancias de prueba 10×8. Derecha: gap medio por tamaño.")
+       f"Figura 8. Izquierda: distribución del gap en las 50 instancias de prueba 10×8 × {NSEED} semillas. Derecha: gap medio "
+       "por tamaño (banda = rango entre semillas).")
 d10 = EV["10×8"]
-table([["Método (prueba 10×8)", "Gap medio", "Desv.", "Mediana", "% óptimo", "Gana a MMR"],
+table([[f"Método (prueba 10×8; {NSEED} × 50 ejecuciones)", "Gap medio", "Desv.", "Mediana", "% óptimo", "Gana a MMR"],
        *[[n, pct(d10[n]["mean"]), num(d10[n]["std"]), pct(d10[n]["median"]), pct(d10[n]["pct_optimal"], 0),
           pct(d10[n]["wins_vs_mmr"], 0)] for n in MODELS + ["MMR"]],
-       ["Módulo 2 (proyecto)", pct(REF2["10×8"][0]), num(REF2["10×8"][1]), "1,85 %", "30 %", "72 %"]],
-      [4.6, 2.3, 2.0, 2.3, 2.3, 2.6], size=9, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5,
+       ["Módulo 2 (proyecto, 1 modelo)", pct(REF2["10×8"][0]), num(REF2["10×8"][1]), "1,85 %", "30 %", "72 %"]],
+      [5.4, 2.1, 1.8, 2.1, 2.1, 2.4], size=9, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5,
       fills=[FILL[n] for n in MODELS] + [FILL["MMR"], FILL["Módulo 2"]])
 if REFL:
     rows = [["Tamaño", "ILS largo mejora al ILS de referencia en"] + [f"{n} vs ILS largo" for n in MODELS] + ["MMR vs ILS largo"]]
@@ -501,12 +516,6 @@ if REFL:
           ("Repetimos el ILS con 2 000 iteraciones y perturbación proporcional a W en los tres tamaños más grandes:", {})],
          keep=True)
     table(rows, [1.7, 3.6, 2.6, 2.7, 2.6, 2.6], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
-SG = R.get("seed_gaps", {})
-if SG and NSEED > 1:
-    para([b("Robustez frente a la semilla. "),
-          ("Gap medio en la prueba 10×8 de los modelos de cada semilla: " +
-           "; ".join(f"{n}: " + " / ".join(pct(g) for g in SG[n]["10×8"]) +
-                     f" (media {pct(np.mean(SG[n]['10×8']))} ± {num(np.std(SG[n]['10×8']))})" for n in MODELS) + ".", {})])
 para([b("Análisis. "), ("ANALISIS_EVALUACION", {})])
 
 # ================================================================ 7. conclusiones
