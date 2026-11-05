@@ -1,5 +1,8 @@
 """Genera el informe de la Tarea 6 (puntos 1, 2, 3, 5 y 6) a partir de figuras_t6/ (figuras y resultados.json).
 
+Es una versión en lenguaje simple: el detalle técnico (fórmulas, hiperparámetros y todas las mediciones) está en el
+notebook Tarea6_WTAP_variantes.ipynb. Todas las cifras del texto se leen de resultados.json.
+
 Uso (desde la raíz del repositorio):
     python scripts/make_diagramas_t6.py
     python scripts/make_informe_t6.py
@@ -9,12 +12,10 @@ import json
 import os
 
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from PIL import Image
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
@@ -34,8 +35,7 @@ BLUE = RGBColor(0x1F, 0x77, 0xB4)
 MUTED = RGBColor(0x6B, 0x75, 0x85)
 INK = RGBColor(0x2E, 0x35, 0x40)
 MODELS = ["Base", "A · sesgo MMR", "B · ISAB"]
-FILL = {"Base": "DCEAF7", "A · sesgo MMR": "ECE4F5", "B · ISAB": "DFF0DF", "MMR": "FDEBD9", "Aleatorio": "EEEEEE",
-        "Módulo 2": "E8EEF6"}
+FILL = {"Base": "DCEAF7", "A · sesgo MMR": "ECE4F5", "B · ISAB": "DFF0DF", "MMR": "FDEBD9", "Módulo 2": "E8EEF6"}
 
 doc = Document()
 sec = doc.sections[0]
@@ -77,7 +77,7 @@ def _runs(runs):
 
 
 def para(runs, style=None, align=None, size=None, space_after=None, keep=False):
-    """runs: str o lista de (texto, {bold, italic, color, font, size})."""
+    """runs: str o lista de (texto, {bold, italic, color, size, sub, sup})."""
     p = doc.add_paragraph(style=style)
     if align is not None:
         p.alignment = align
@@ -91,8 +91,6 @@ def para(runs, style=None, align=None, size=None, space_after=None, keep=False):
         r.italic = opt.get("italic", False)
         if "color" in opt:
             r.font.color.rgb = opt["color"]
-        if "font" in opt:
-            r.font.name = opt["font"]
         if size or "size" in opt:
             r.font.size = Pt(opt.get("size", size))
         if opt.get("sub"):
@@ -103,21 +101,22 @@ def para(runs, style=None, align=None, size=None, space_after=None, keep=False):
 
 
 def bullet(runs):
-    p = para(runs, style="List Bullet", space_after=2)
+    p = para(runs, style="List Bullet", space_after=3)
     p.paragraph_format.left_indent = Cm(0.9)
     return p
-
-
-def c(txt):
-    return (txt, {"font": "Liberation Mono", "size": 9.5})
 
 
 def b(txt):
     return (txt, {"bold": True})
 
 
-def i(txt):
-    return (txt, {"italic": True})
+def sub(txt):
+    return (txt, {"sub": True})
+
+
+def note(txt):
+    """Nota en letra pequeña bajo una tabla."""
+    return para([(txt, {"italic": True, "color": MUTED, "size": 9})])
 
 
 def shade(cell, hex_fill):
@@ -138,14 +137,12 @@ def cell_text(cell, runs, size=9, bold=False, align=WD_ALIGN_PARAGRAPH.LEFT, col
         r.font.size = Pt(opt.get("size", size))
         r.bold = opt.get("bold", bold)
         r.italic = opt.get("italic", False)
-        if "font" in opt:
-            r.font.name = opt["font"]
         if color is not None:
             r.font.color.rgb = color
     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
 
-def table(rows, widths, header_fill="1B2A41", fills=None, size=9, aligns=None, bold_rows=()):
+def table(rows, widths, header_fill="1B2A41", fills=None, size=9, aligns=None):
     t = doc.add_table(rows=len(rows), cols=len(widths))
     t.style = "Table Grid"
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -161,7 +158,7 @@ def table(rows, widths, header_fill="1B2A41", fills=None, size=9, aligns=None, b
                 cell_text(cell, val, size=size, bold=True, color=RGBColor(0xFF, 0xFF, 0xFF), align=al)
                 shade(cell, header_fill)
             else:
-                cell_text(cell, val, size=size, align=al, bold=r_ in bold_rows)
+                cell_text(cell, val, size=size, align=al)
                 if fills and fills[r_ - 1]:
                     shade(cell, fills[r_ - 1])
     for k, row in enumerate(t.rows):                     # evita que una fila (y la tabla) se parta entre páginas
@@ -184,20 +181,14 @@ def figure(path, width_cm, caption):
     para([(caption, {"italic": True, "color": MUTED})], align=WD_ALIGN_PARAGRAPH.CENTER, size=9, space_after=8)
 
 
-def formula(latex, name, height_cm=1.0, fontsize=17):
-    path = os.path.join(TMP, f"{name}.png")
-    fig = plt.figure(figsize=(8, 0.6))
-    fig.text(0, 0.5, latex, fontsize=fontsize, color="#1B2A41", va="center")
-    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.04, transparent=True)
-    plt.close(fig)
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_after = Pt(6)
-    p.add_run().add_picture(path, height=Cm(height_cm))
-
-
-def page_break():
-    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+def crop(path, name, box_frac):
+    """Recorta una figura (fracciones x0, y0, x1, y1) y la guarda en la carpeta temporal."""
+    im = Image.open(path)
+    w, h = im.size
+    x0, y0, x1, y1 = box_frac
+    out = os.path.join(TMP, name)
+    im.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h))).save(out)
+    return out
 
 
 def num(v, d=2):
@@ -218,25 +209,31 @@ def miles(n):
     return f"{n:,}".replace(",", ".")
 
 
+def rngn(vals, d=1):
+    vals = [v for v in vals if v is not None]
+    lo, hi = num(min(vals), d), num(max(vals), d)
+    return lo if lo == hi else f"{lo}–{hi}"
+
+
 def F(name):
     return os.path.join(FIG, name)
 
 
+# ---------------------------------------------------------------- datos que cita el texto
 EV = R["eval"]
 SIZES = list(EV)
 CONV = R["convergence"]
 HIST = R["histories"]
 CRIT = R["criterio_mmr"]
 TIMING = R["timing"]
-SL = R["slopes_step"]
-SLE = R["slopes_encoder"]
-SLT = R["slopes_total"]
 SPD = R["speedup_vs_mod2"]
 REF2 = R["ref_modulo2"]
 REFL = R.get("ref_ils_largo", {})
 DIAG = R["diagnostico_modulo2"]
-PAR = R["params"]
 NSEED = R["n_seeds"]
+TT = R["eval_time_ms"]
+A_, B_ = "A · sesgo MMR", "B · ISAB"
+t10 = "10×8"
 
 
 def gm(label, name):
@@ -247,496 +244,278 @@ def best_model(label):
     return min(MODELS, key=lambda n: gm(label, n))
 
 
-# ---------------------------------------------------------------- cifras derivadas que cita el texto
-A_, B_ = "A · sesgo MMR", "B · ISAB"
-MAXEP = R["train_cfg"]["max_epochs"]
-NRUN = len(MODELS) * NSEED
-TT = R["eval_time_ms"]
-
-
-def gwin(name, a, b_):
-    """Gap de validación medio entre las épocas a y b_ (1 = primera época), promedio de las semillas."""
-    return float(np.mean([np.mean(h["val_gap"][a - 1:b_]) for h in HIST[name]]))
+def step_ms(name, n):
+    return 1e3 * TIMING[name]["dec"][TIMING[name]["n"].index(n)]
 
 
 def glast(name, k=10):
+    """Gap de validación medio de las últimas k épocas, promedio de las semillas."""
     return float(np.mean([np.mean(h["val_gap"][-k:]) for h in HIST[name]]))
 
 
-def rngn(vals, d=1):
-    lo, hi = num(min(vals), d), num(max(vals), d)
-    return lo if lo == hi else f"{lo}–{hi}"
-
-
-def lose(label, name):
-    return 100 - EV[label][name]["wins_vs_mmr"] - EV[label][name]["ties_vs_mmr"]
-
-
-def seed_rng(label, name):
-    sm = EV[label][name]["seed_means"]
-    return max(sm) - min(sm)
-
-
-def lista(xs):
-    xs = list(xs)
-    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
-
-
-EP1 = [h["val_gap"][0] for n in MODELS for h in HIST[n]]
-ACC0_A = HIST[A_][0]["init"]["val_acc"]
-EARLY = sum(len(h["val_gap"]) < MAXEP for n in MODELS for h in HIST[n])
-FULL_BEST = [CONV[n]["best_epoch"][s] for n in MODELS for s, h in enumerate(HIST[n]) if len(h["val_gap"]) == MAXEP]
-ALPHA_BEST = [h["alpha"][h["best_epoch"] - 1] for h in HIST[A_]]
-AENC = np.array(R["alpha_enc"])                              # (capa, dirección: 0 armas→obj., 1 obj.→armas, cabeza)
-AMAX = np.unravel_index(AENC.argmax(), AENC.shape)
+NRUN = len(MODELS) * NSEED
 SMALL = [l for l in SIZES if l in REF2]                       # tamaños compartidos con el módulo 2 (hasta 30×20)
-SPREAD = {l: max(gm(l, n) for n in MODELS) - min(gm(l, n) for n in MODELS) for l in SIZES}
-SEED_STD = [EV[l][n]["seed_std"] for l in SIZES for n in MODELS]
-BEAT_MMR = {l: {n: sum(m < gm(l, "MMR") for m in EV[l][n]["seed_means"]) for n in MODELS} for l in SIZES}
-WINNERS = {n: [l for l in SIZES if best_model(l) == n] for n in MODELS}
-B_MOST_VAR = [l for l in SIZES if max(MODELS, key=lambda n: EV[l][n]["seed_std"]) == B_]
-N_LARGEST = int(TIMING["Base"]["n"][-1])
-LARGEST = f"{int(TIMING['Base']['W'][-1])}×{N_LARGEST // int(TIMING['Base']['W'][-1])}"
-SL_SIN = {n: float(np.polyfit(np.log(TIMING[n]["n"][-5:-1]), np.log(TIMING[n]["dec"][-5:-1]), 1)[0]) for n in TIMING}
+SPREAD = max(max(gm(l, n) for n in MODELS) - min(gm(l, n) for n in MODELS) for l in SIZES)
 SEC = {n: CONV[n]["sec_per_epoch"] for n in MODELS}
-TRAIN_MIN = {n: sum(CONV[n]["train_minutes"]) for n in MODELS}
+ALPHA_BEST = [h["alpha"][h["best_epoch"] - 1] for h in HIST[A_]]
+EP_GAP3 = [e for n in MODELS for e in CONV[n]["epoch_gap_below_3"] if e is not None]
+DEC_PER_INST = R["n_train_decisions"] // R["n_train"]         # decisiones por instancia de entrenamiento (= W)
+d10 = EV[t10]
+k10 = TIMING["Base"]["n"].index(80)
 
 
-# ================================================================ portada / encabezado
+def ep_rng(v):
+    v = [x for x in v if x is not None]
+    return "no lo alcanza" if not v else (str(min(v)) if min(v) == max(v) else f"{min(v)}–{max(v)}")
+
+
+# ================================================================ portada y resumen
 para([("OII462 · Tarea 6", {"bold": True, "color": BLUE, "size": 10})], space_after=0)
 para([("Encoder estático, complejidad y variantes del Transformer para el WTAP", {"bold": True, "color": NAVY, "size": 19})],
      space_after=2)
-para([("Informe: rediseño de la arquitectura, complejidad temporal, variantes y comparación experimental "
-       "(puntos 1, 2, 3, 5 y 6)", {"color": MUTED, "size": 11})], space_after=2)
+para([("Informe de los puntos 1, 2, 3, 5 y 6", {"color": MUTED, "size": 11})], space_after=2)
 para([(GRUPO, {"bold": True}), ("  ·  Optimización combinatoria  ·  2026", {"color": MUTED})], size=10, space_after=10)
 
-t10 = "10×8"
 para([b("Resumen. "),
-      (f"El Transformer con puntero del módulo 2 recibía en cada paso una secuencia de 1 + W·T filas con 16 features, de las "
-       f"cuales {DIAG['n_dinamicas']} dependen del estado; por eso su \"encoder\" se recalculaba en cada una de las W "
-       "decisiones, con un costo cuadrático en el número de pares por paso. Lo rediseñamos con responsabilidades separadas: "
-       "un encoder bipartito armas ↔ objetivos que solo ve V", {}), ("j", {"sub": True}),
-      (" y p", {}), ("ij", {"sub": True}),
-      (" (token aprendible para las armas y la matriz como aristas) y que corre una vez por instancia, y un decoder que "
-       "integra el estado y es lineal en n = W·T por paso. Sobre esa base proponemos dos variantes: ", {}),
-      b("A"), (", con sesgo inductivo (de salida y atencional) basado en la ganancia marginal de MMR, y ", {}), b("B"),
-      (", que re-contextualiza los pares en cada paso con un bloque ISAB de costo lineal. Una decisión de 50×40 pasa de "
-       f"{num(1e3 * TIMING['Módulo 2']['dec'][TIMING['Módulo 2']['n'].index(2000)], 1)} ms a "
-       f"{num(1e3 * TIMING['Base']['dec'][TIMING['Base']['n'].index(2000)], 2)} ms. ", {}),
-      (f"Con la misma configuración y {NSEED} semillas por modelo, los tres superan a MMR desde la primera época de "
-       f"entrenamiento. En las 50 instancias de prueba 10×8 logran gaps de {pct(gm(t10, 'Base'))} (base), "
-       f"{pct(gm(t10, A_))} (A) y {pct(gm(t10, B_))} (B), frente a {pct(gm(t10, 'MMR'))} de MMR y "
-       f"{pct(REF2[t10][0])} del módulo 2. Entrenados solo con 10×8, mejoran al módulo 2 en todos los tamaños que comparten "
-       f"(hasta {SMALL[-1]}) y a MMR hasta 50×40; en 100×80, MMR ({pct(gm('100×80', 'MMR'))}) queda mejor en promedio. "
-       f"A parte desde la política de MMR, y B obtiene la menor pérdida de validación y más soluciones iguales a las del "
-       f"experto, pero cada época le cuesta {num(SEC[B_] / SEC['Base'], 1)} veces más. Las diferencias de gap medio entre "
-       "las tres arquitecturas son del orden de la variación entre semillas.", {})])
+      (f"En el módulo 2, nuestro modelo volvía a procesar toda la instancia en cada decisión, porque "
+       f"{DIAG['n_dinamicas']} de sus {DIAG['n_features']} datos de entrada cambiaban después de cada asignación. En esta "
+       "tarea lo rediseñamos en dos partes con responsabilidades separadas: un encoder que lee una sola vez los datos fijos "
+       "de la instancia (el valor de cada objetivo y las probabilidades de impacto) y un decoder que, en cada paso, mira el "
+       "estado actual y elige el siguiente par arma → objetivo. Así, el costo de cada decisión crece en proporción al tamaño "
+       "de la instancia y no a su cuadrado. Probamos además dos variantes: A, que le da al modelo una pista de la heurística "
+       "clásica MMR, y B, que deja que los pares intercambien información en cada paso sin perder esa eficiencia. En las "
+       f"instancias de prueba de 10×8, los tres modelos quedan a {rngn([gm(t10, n) for n in MODELS])} % del experto, contra "
+       f"{pct(gm(t10, 'MMR'), 1)} de MMR y {pct(REF2[t10][0], 1)} del modelo del módulo 2, y son parecidos entre sí.", {})])
+
+para([b("Términos usados en este informe")], keep=True, space_after=3)
+table([["Término", "Significado"],
+       ["Instancia W×T", "Un problema con W armas y T objetivos. Las acciones posibles son los n = W·T pares arma → objetivo."],
+       ["Experto ILS", "El algoritmo de búsqueda local de las tareas anteriores. El modelo lo imita y lo usamos como referencia "
+                       "(en las instancias pequeñas verificadas encuentra el óptimo)."],
+       ["Gap", "Cuánto peor es una solución que la del experto, en porcentaje: 0 % significa igual de buena."],
+       ["MMR", "Heurística clásica que, en cada paso, asigna el par que más reduce el valor esperado que sobrevive."],
+       ["Encoder y decoder", "Las dos partes del modelo: el encoder lee la instancia y el decoder toma las decisiones una a "
+                             "una."],
+       ["Época y semilla", "Una época es una pasada por todos los datos de entrenamiento. Cada semilla es una repetición del "
+                           "entrenamiento con otro punto de partida aleatorio."]],
+      [3.4, TEXT_W - 3.8], size=9, fills=["F3F5F8", None] * 3)
 
 # ================================================================ 1. rediseño
 doc.add_heading("1. Rediseño de la arquitectura (punto 1)", level=1)
-doc.add_heading("1.1 Diagnóstico del modelo del módulo 2", level=2)
-para(["En el módulo 2 la entrada era una matriz (1 + W·T) × 16: una fila global y una fila por par (arma i → objetivo j). "
-      "El bloque de self-attention de 2 capas y el puntero se ejecutaban juntos en cada paso, porque la matriz se recalculaba "
-      "con state2vec tras cada asignación. Recorriendo una construcción completa verificamos qué columnas cambian entre pasos:"])
-table([["Tipo", "Features del módulo 2"],
-       [f"Estáticas ({len(DIAG['estaticas'])})", ", ".join(DIAG["estaticas"])],
-       [f"Dinámicas ({DIAG['n_dinamicas']})", ", ".join(DIAG["dinamicas"])]],
-      [3.2, TEXT_W - 3.6], fills=["DCEAF7", "F9DEDC"])
-para([("Ese \"encoder\" no cumplía la definición de la tarea: dependía del estado y no podía ejecutarse una sola vez. Su costo "
-       "por paso era la self-attention sobre 1 + W·T filas, O((WT)", {}), ("2", {"sup": True}),
-      (") por capa, más state2vec, que es O(W", {}), ("2", {"sup": True}),
-      ("T) porque mmr_completa simula MMR hasta el final.", {})])
-
-doc.add_heading("1.2 Arquitectura base rediseñada", level=2)
-figure(F("arq_base.png"), TEXT_W,
-       "Figura 1. Arquitectura base rediseñada. A la izquierda, el encoder estático (1 vez por instancia); a la derecha, el "
-       "decoder, que integra el estado en cada uno de los W pasos. Los círculos naranjos marcan los cambios respecto del "
-       "módulo 2.")
-para([b("Encoder (estático). "),
-      ("Las armas no tienen información propia: solo su fila de la matriz p. Siguiendo la sugerencia del enunciado, cada arma "
-       "parte de un ", {}), b("token aprendible"),
-      (" compartido y cada objetivo de un embedding lineal de V", {}), ("j", {"sub": True}), ("/max V. La matriz entra como ", {}),
-      b("aristas de un grafo bipartito"),
-      (": en cada una de las 2 capas, las armas atienden a los objetivos y los objetivos a las armas (en paralelo, MHA de 4 "
-       "cabezas), y la arista p̃", {}), ("ij", {"sub": True}),
-      (" se inyecta en el puntaje (un peso por cabeza) y en el mensaje (un vector aprendido), como en la EGAT del material y en "
-       "MatNet (Kwon et al., 2021). Tras cada atención hay residual + LayerNorm y un feed-forward 64→128→64. La salida son "
-       "los embeddings H", {}), ("w", {"sup": True}), (" (W×d) y H", {}), ("t", {"sup": True}),
-      (" (T×d) y las partes del puntero que no dependen del estado, que se precalculan una vez.", {})])
-formula(r"$s^{(h)}_{ij} = \frac{(W_Q h^w_i)^{(h)}\cdot (W_K h^t_j)^{(h)}}{\sqrt{d_h}} + \beta^{(h)}\tilde p_{ij},"
-        r"\qquad m_i = W_O[\sum_j \mathrm{softmax}_j(s^{(h)}_{ij})\,((W_V h^t_j)^{(h)} + w_e^{(h)}\tilde p_{ij})]_h$",
-        "encoder", height_cm=1.15)
-para([b("Decoder (dinámico). "),
-      ("Recibe el estado de la solución parcial: la máscara de armas libres y, por objetivo, q", {}), ("j", {"sub": True}),
-      (", v", {}), ("j", {"sub": True}), ("q", {}), ("j", {"sub": True}), (" y ln(v", {}), ("j", {"sub": True}), ("q", {}),
-      ("j", {"sub": True}),
-      ("). Suma un MLP de ese estado al embedding de cada objetivo, arma un contexto con el promedio de las armas libres, el "
-       "de los objetivos y el progreso, hace un glimpse (MHA de 4 cabezas, Kool et al., 2019) y puntúa cada par con un ", {}),
-      b("puntero aditivo"), (" que también ve la arista:", {})])
-formula(r"$u_{ij} = C\,\tanh((W_r c)^{\top}\,\mathrm{ReLU}(W_A h^w_i + W_B h_j(t) + W_E\tilde p_{ij})/\sqrt{d}),"
-        r"\quad u_{ij}=-10^9 \;\mathrm{si}\; i \;\mathrm{ya\;fue\;usada}$", "pointer", height_cm=0.85)
-para(["El modelo ya no recibe features heurísticas (ganancia, arrepentimiento, anticipación con MMR): debe aprenderlas de "
-      "V, p y q. Así la información dinámica entra solo al decoder y el encoder cumple la definición de la tarea."])
-
-doc.add_heading("1.3 Cambios respecto del módulo 2", level=2)
-table([["#", "Aspecto", "Módulo 2", "Base rediseñada"],
-       ["1", "Tokens de entrada", "1 + W·T filas (fila global + pares) con 16 features",
-        "W armas (token aprendible) + T objetivos (V_j) + matriz p_ij como aristas"],
-       ["2", "Encoder", "self-attention entre las 1 + W·T filas, 1 cabeza, se ejecuta en cada paso",
-        "atención cruzada armas ↔ objetivos con aristas, 4 cabezas, 1 vez por instancia"],
-       ["3", "Información dinámica", "dentro de las features de entrada (12 de 16)",
-        "solo en el decoder: máscara, q_j, valor en juego y progreso; sin features heurísticas"],
-       ["4", "Contexto del decoder", "[h_global ; promedio de filas disponibles]",
-        "[promedio de armas libres ; promedio de objetivos con estado ; progreso] + glimpse MHA"],
-       ["5", "Puntero", "q·h_r/√d sobre las filas", "aditivo sobre pares, con la arista p_ij y recorte C·tanh"],
-       ["", "Entrenamiento", "60 000 estados independientes",
-        "teacher forcing: 1 encoder + W pasos del decoder por instancia"]],
-      [0.6, 3.0, 6.4, 7.6], fills=[None] * 6, size=8.8)
+para([(f"El modelo del módulo 2 recibía una tabla con una fila por cada par arma → objetivo y {DIAG['n_features']} datos "
+       f"por fila. Al recorrer una construcción completa comprobamos que {DIAG['n_dinamicas']} de esos datos cambian "
+       "después de cada asignación (por ejemplo, si el arma ya fue usada o cuánto valor queda en el objetivo). Por eso todo "
+       "el modelo debía recalcularse en cada decisión: no tenía un encoder propiamente tal, y el costo de cada decisión "
+       "crecía con el cuadrado del número de pares.", {})])
+bullet([b("Encoder (una vez por instancia). "),
+        ("Recibe solo lo que no cambia: el valor V", {}), sub("j"),
+        (" de cada objetivo y las probabilidades de impacto p", {}), sub("ij"),
+        (". Como las armas no tienen datos propios, todas parten del mismo vector aprendido (un token aprendible) y se "
+         "diferencian por sus probabilidades, que el modelo usa como conexiones entre armas y objetivos: cada arma se "
+         "informa de los objetivos que puede alcanzar, y cada objetivo, de las armas que lo pueden atacar.", {})])
+bullet([b("Decoder (en cada decisión). "),
+        ("Recibe el estado: qué armas siguen libres y cuánto valor sobrevive en cada objetivo. Combina esa información con "
+         "lo que entregó el encoder, da un puntaje a cada par arma libre → objetivo y elige el de mayor puntaje.", {})])
+para([("Además, el modelo ya no recibe pistas calculadas con MMR, como el del módulo 2: debe aprenderlas por su cuenta a "
+       "partir de los valores, las probabilidades y el estado.", {})])
+figure(F("arq_base.png"), TEXT_W * 0.95,
+       "Figura 1. Arquitectura base rediseñada. Izquierda: el encoder, que se calcula una vez por instancia solo con los "
+       "datos fijos. Derecha: el decoder, que se repite en cada decisión y usa el estado actual. Los círculos naranjos "
+       "numerados marcan los cambios respecto del módulo 2 (ver la tabla).")
+para([("La tabla resume los cambios, con la numeración de la Figura 1:", {})], keep=True)
+table([["#", "Qué cambió", "Módulo 2", "Ahora"],
+       ["1", "Qué recibe el modelo", f"Una fila por par arma → objetivo, con {DIAG['n_features']} datos",
+        "Armas y objetivos por separado; las probabilidades, como conexiones entre ellos"],
+       ["2", "Encoder", "Se recalculaba en cada decisión", "Se calcula una sola vez por instancia"],
+       ["3", "Estado de la solución", "Mezclado con los datos de entrada, junto con pistas de MMR",
+        "Solo en el decoder: armas libres y valor que sobrevive en cada objetivo"],
+       ["4", "Resumen del estado", "Una fila global y el promedio de las filas disponibles",
+        "Promedios de las armas libres y de los objetivos, refinados con atención"],
+       ["5", "Puntaje de cada par", "Comparaba cada fila con el resumen",
+        "Combina la información del arma, del objetivo y de su probabilidad de impacto"],
+       ["", "Entrenamiento", f"{miles(R['n_train_decisions'])} decisiones sueltas",
+        "Instancias completas: una lectura del encoder y W decisiones"]],
+      [0.6, 3.4, 5.9, 7.5], size=9)
 
 # ================================================================ 2. complejidad
-doc.add_heading("2. Complejidad temporal del encoder y del decoder (punto 2)", level=1)
-para([("Sea n = W·T el tamaño de la matriz p, que es también el número de acciones; d = 64 la dimensión, L = 2 las capas y "
-       "m = 16 los puntos inductores de la variante B. Un decoder que entrega un logit por acción necesita al menos Ω(n) por "
-       "paso, así que ese es el mínimo alcanzable.", {})])
-table([["Modelo", "Encoder (1 vez por instancia)", "Cómputo por paso del decoder", "Por instancia (W pasos)"],
-       ["Módulo 2", "— (todo se recalcula en cada paso)", "state2vec O(W²T) + self-attention O(L·n²·d)", "O(W·n²·d)"],
-       ["Base", "O(L·(n·d + (W+T)·d²))", "O(n·d + (W+T)·d²)  → lineal", "O(W·n·d)"],
-       ["A · sesgo MMR", "igual a la base + O(L·n)", "base + O(n) (ganancias)  → lineal", "O(W·n·d)"],
-       ["B · ISAB", "igual a la base", "O(n·m·d + n·d²)  → lineal", "O(W·n·m·d)"],
-       ["B con self-attention completa", "igual a la base", "O(n²·d)  → cuadrático", "O(W·n²·d)"]],
-      [3.6, 4.4, 5.6, 3.9], fills=["E8EEF6", FILL["Base"], FILL["A · sesgo MMR"], FILL["B · ISAB"], "F9DEDC"], size=8.8)
-para(["El encoder rediseñado es incluso lineal en n, porque la atención es bipartita (cada arma mira T objetivos y cada "
-      "objetivo W armas), aunque la tarea permitiría uno cuadrático. El decoder de la base y de la variante A es lineal, así "
-      "que no necesita un mecanismo de atención eficiente. La única pieza cuadrática que aparecería en el decoder es la "
-      "interacción entre pares de la variante B; por eso la implementamos con ISAB (sección 3.2)."])
-figure(F("complejidad.png"), TEXT_W,
-       "Figura 2. Tiempos medidos con PyTorch en 1 hilo (mediana de varias repeticiones, pesos aleatorios). Izquierda: una "
-       "decisión; centro: el encoder; derecha: total estimado por instancia (encoder + W pasos). Pendientes log-log ajustadas "
-       "con los 4 tamaños más grandes de cada curva.")
-k10 = TIMING["Base"]["n"].index(80)
-k2000b, k2000m = TIMING["Base"]["n"].index(2000), TIMING["Módulo 2"]["n"].index(2000)
-table([["Modelo", "Pendiente por paso", "Pendiente del encoder", "Pendiente por instancia", "Paso en 10×8", "Paso en 50×40"],
-       *[[name, num(SL[name]), num(SLE[name]) if name in SLE else "—", num(SLT[name]),
-          f"{num(1e3 * TIMING[name]['dec'][TIMING[name]['n'].index(80)], 2)} ms",
-          f"{num(1e3 * TIMING[name]['dec'][TIMING[name]['n'].index(2000)], 2)} ms"]
-         for name in ["Módulo 2", "Base", "A · sesgo MMR", "B · ISAB", "B con atención completa"]]],
-      [4.6, 2.5, 2.6, 2.7, 2.6, 2.6], size=8.8,
-      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5,
-      fills=["E8EEF6", FILL["Base"], FILL["A · sesgo MMR"], FILL["B · ISAB"], "F9DEDC"])
-para([b("Lectura. "),
-      (f"Las pendientes confirman el análisis: el paso del módulo 2 y el de B con self-attention completa crecen como n² "
-       f"(pendientes {num(SL['Módulo 2'])} y {num(SL['B con atención completa'])}), mientras que el de los tres modelos "
-       f"nuevos crece de forma aproximadamente lineal (pendientes {num(SL['Base'])}, {num(SL['A · sesgo MMR'])} y "
-       f"{num(SL['B · ISAB'])}). Lo que excede a 1 viene del tamaño más grande ({LARGEST}, n = {miles(N_LARGEST)}), "
-       "probablemente porque allí los tensores de un paso dejan de caber en la caché del procesador: sin ese punto, las "
-       f"pendientes son {num(SL_SIN['Base'])}, {num(SL_SIN['A · sesgo MMR'])} y {num(SL_SIN['B · ISAB'])}. Con el mismo "
-       f"criterio, las del módulo 2 y de B con atención completa quedan en {num(SL_SIN['Módulo 2'])} y "
-       f"{num(SL_SIN['B con atención completa'])}, todavía claramente superlineales. El encoder queda bajo 1 "
-       f"(pendientes {rngn([SLE[n] for n in MODELS], 2)}) porque en los tamaños medidos todavía pesa el costo fijo de lanzar "
-       f"las operaciones. Cuesta {num(1e3 * TIMING['Base']['enc'][k10], 2)} ms en 10×8 y se paga una sola vez. Por "
-       "instancia, la base es "
-       f"{num(SPD['10×8'], 1)} veces más rápida que el módulo 2 en 10×8 y {num(SPD['50×40'], 0)} veces en 50×40.", {})])
+doc.add_heading("2. Complejidad temporal (punto 2)", level=1)
+para([("Llamamos n = W·T al número de pares arma → objetivo. Un costo es ", {}), b("lineal"),
+      (" si crece en proporción a n (una instancia el doble de grande toma el doble de tiempo) y ", {}), b("cuadrático"),
+      (" si crece con n² (el doble de grande toma cuatro veces más). El decoder se ejecuta W veces por instancia, así que su "
+       "costo es el que más importa; el enunciado pide que sea a lo más lineal.", {})])
+table([["Modelo", "Encoder (una vez por instancia)", "Decoder (en cada decisión)"],
+       ["Módulo 2", "No existe por separado: todo se recalcula en cada paso",
+        "Cuadrático, O(n²): cada par se compara con todos los demás"],
+       ["Base y variante A", "Lineal, O(n): cada arma mira los T objetivos y cada objetivo las W armas",
+        "Lineal, O(n): se revisa cada par una vez"],
+       ["Variante B (con ISAB)", "Lineal, O(n)", "Lineal, O(n·m): los pares se comunican a través de m = 16 resúmenes"],
+       ["Variante B sin ISAB (solo para comparar)", "Lineal, O(n)", "Cuadrático, O(n²)"]],
+      [4.4, 6.2, 6.8], size=9, fills=[FILL["Módulo 2"], FILL["Base"], FILL[B_], "F9DEDC"])
+para([("Un decoder lineal es lo mejor posible, porque en cada decisión hay que dar un puntaje a cada uno de los n pares. El "
+       "encoder también es lineal, aunque la tarea permitía que fuera cuadrático. La única parte que podría volverse "
+       "cuadrática es la comunicación entre pares de la variante B, y por eso usa ISAB (sección 3.2).", {})])
+figure(crop(F("complejidad.png"), "complejidad_paso.png", (0.0, 0.0, 0.328, 1.0)), 9.5,
+       "Figura 2. Tiempo de una decisión según el número de pares n, medido en un hilo de CPU (ambos ejes en escala "
+       "logarítmica). Las curvas más empinadas, del módulo 2 y de B sin ISAB («B con atención completa» en la leyenda), "
+       "crecen como n²; las de los modelos nuevos, "
+       "como n.")
+para([(f"Las mediciones confirman el análisis: en una instancia de 50×40, una decisión pasa de "
+       f"{num(step_ms('Módulo 2', 2000), 1)} ms en el módulo 2 a {num(step_ms('Base', 2000), 2)} ms en la base, y resolver "
+       f"la instancia completa es {num(SPD['50×40'], 0)} veces más rápido. El encoder cuesta "
+       f"{num(1e3 * TIMING['Base']['enc'][k10], 2)} ms en 10×8 y se paga una sola vez.", {})])
 
 # ================================================================ 3. variantes
-doc.add_heading("3. Variantes propuestas (punto 3)", level=1)
-doc.add_heading("3.1 Variante A — sesgo inductivo con el criterio de MMR", level=2)
-figure(F("arq_variante_A.png"), TEXT_W * 0.93,
-       "Figura 3. Variante A: la base más el sesgo inductivo (en morado), atencional en el encoder y de salida en el puntero.")
-para(["Aplicamos las dos formas de sesgo inductivo vistas en el material, ambas con la ganancia marginal de MMR, "
-      "g_ij = V_j·q_j·p_ij, y con pesos aprendibles para que el modelo decida cuánto confiar en el sesgo:"])
-bullet([b("Sesgo de salida (decoder, dinámico): "),
-        ("u_ij ← u_ij + α·ln(g_ij(t)/g_max(t)), con α aprendible que parte en 1. La política queda π(i, j) ∝ e^u_ij·(g_ij/g_max)^α: "
-         "con u = 0 es un \"MMR suave\" y con α → ∞ es MMR exacto, así que la red aprende correcciones sobre MMR. Como "
-         "inicializamos W_r = 0 en los tres modelos, la variante A parte exactamente desde la política de MMR.", {})])
-bullet([b("Sesgo atencional (encoder, estático): "),
-        ("en cada capa, dirección y cabeza se suma α^(l,dir,h)·ln(V_j p_ij / max Vp) al puntaje armas ↔ objetivos (la ganancia "
-         "de MMR con la asignación vacía), con α^(l,dir,h) aprendibles que parten en 0, como en el material.", {})])
-para([b("¿Por qué MMR es un criterio robusto? "),
-      ("(i) Es la heurística constructiva clásica del WTAP (den Broeder et al., 1959) y es óptima cuando todas las armas son "
-       "iguales: si p_ij = p_j el problema es una asignación separable y convexa, donde elegir siempre el mayor retorno "
-       "marginal es óptimo. (ii) Es la construcción inicial de métodos del estado del arte (Ahuja et al., 2007; ver también "
-       "la revisión de Kline et al., 2019) y de nuestro propio experto ILS. (iii) En nuestros datos produce soluciones muy "
-       f"superiores al promedio: gap {pct(CRIT['gap_mmr_val'])} frente a {pct(CRIT['gap_rand_val'], 1)} del constructivo "
-       "aleatorio en 100 instancias de validación, y la acción del experto está casi siempre entre las de mayor ganancia:", {})])
+doc.add_heading("3. Variantes (punto 3)", level=1)
+doc.add_heading("3.1 Variante A: una pista de MMR (sesgo inductivo)", level=2)
+para([("Un sesgo inductivo es una pista que le damos al modelo para que no parta de cero. Usamos la de MMR: cuánto valor "
+       "esperado elimina asignar el arma i al objetivo j en el estado actual, g", {}), sub("ij"), (" = V", {}), sub("j"),
+      (" · q", {}), sub("j"), (" · p", {}), sub("ij"), (", donde q", {}), sub("j"),
+      (" es la probabilidad de que el objetivo j siga en pie. La pista se suma en dos lugares, como en el material del "
+       "curso:", {})], keep=True)
+bullet([b("En el puntaje de cada par (decoder): "),
+        ("los pares con mayor ganancia de MMR reciben más puntaje. Al comienzo el modelo elige exactamente lo mismo que "
+         "MMR, y durante el entrenamiento aprende cuándo conviene apartarse.", {})])
+bullet([b("En la atención del encoder: "),
+        ("cada arma presta más atención a los objetivos donde su ganancia inicial es mayor.", {})])
+para([("En ambos casos la pista se multiplica por pesos α que el modelo aprende, así que él decide cuánto confiar en ella.",
+       {})])
+para([b("¿Por qué MMR es un criterio robusto?")], keep=True, space_after=2)
 cob = CRIT["cobertura"]
-table([["Posición de la acción del experto en el ranking de MMR", "top-1", "top-2", "top-3", "top-5", "top-10"],
-       ["% de las 3 000 decisiones de validación"] + [pct(100 * cob[k], 1) for k in ("1", "2", "3", "5", "10")]],
-      [7.5, 2.0, 2.0, 2.0, 2.0, 2.0], size=9, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
-para(["Es decir, MMR acierta la decisión exacta del experto en ≈80 % de los casos y la tiene entre sus 3 mejores en ≈99 %: "
-      "el sesgo empuja al modelo hacia una región muy buena de acciones y le deja aprender cuál elegir dentro de ella."])
+bullet(["Es la heurística clásica del WTAP (den Broeder et al., 1959) y es óptima cuando todas las armas son iguales."])
+bullet(["Es el punto de partida de métodos del estado del arte (Ahuja et al., 2007) y de nuestro propio experto."])
+bullet([(f"En nuestros datos, el experto elige la misma acción que MMR en el {pct(100 * cob['1'], 0)} de las decisiones, "
+         f"y esa acción está entre las 3 mejores de MMR en el {pct(100 * cob['3'], 0)} de los casos.", {})])
 
-doc.add_heading("3.2 Variante B — decoder con atención eficiente (ISAB)", level=2)
-figure(F("arq_variante_B.png"), TEXT_W * 0.93,
-       "Figura 4. Variante B: el contexto de la base (promedios + glimpse) se reemplaza por un bloque ISAB sobre los pares "
-       "factibles (en verde).")
-para(["En la base, los pares solo compiten en el softmax final: un par no \"sabe\" si otra arma libre aprovecharía mejor su "
-      "objetivo, información que en el módulo 2 aportaban el arrepentimiento y la self-attention entre filas. La variante B "
-      "re-contextualiza el estado en cada paso: los pares factibles Z_ij(t) interactúan mediante un Induced Set Attention Block "
-      "(Lee et al., 2019) con m = 16 puntos inductores aprendibles. Primero los puntos resumen a los pares, I' = "
-      "LN(I + MHA(I, Z, Z)) + FF; luego cada par lee ese resumen, Z' = LN(Z + MHA(Z, I', I')) + FF. El contexto pasa a ser "
-      "el resumen inducido, c = W_c[promedio de I' ; progreso], y el puntero usa los pares contextualizados."])
-para([b("Justificación del mecanismo. "),
-      ("Una self-attention completa entre los n pares costaría O(n²·d) en cada paso: es justamente el costo del módulo 2 y "
-       "rompe la exigencia de un decoder lineal (Figura 2, curva roja). ISAB la reemplaza por dos atenciones cruzadas de costo "
-       "O(n·m·d). Lo preferimos a LUNA porque el estado del WTAP es un conjunto sin orden que cambia en cada paso (desaparecen "
-       "los pares del arma asignada): no hay una secuencia ni una memoria que deba persistir entre capas, que es lo que aporta "
-       "el depósito de LUNA, mientras que ISAB es el bloque del Set Transformer para conjuntos y construye un resumen nuevo en "
-       "cada capa. La atención dispersa requeriría un criterio heurístico para decidir qué pares conectar, que es el papel del "
-       "sesgo de la variante A; así cada variante aísla un efecto.", {})])
+figure(F("arq_variante_A.png"), TEXT_W * 0.78,
+       "Figura 3. Variante A: la base más la pista de MMR (en morado), en el encoder y en el puntaje final.")
+doc.add_heading("3.2 Variante B: los pares se comunican (ISAB)", level=2)
+para([("En la base, cada par se evalúa por separado: un par no \"sabe\" si otra arma libre aprovecharía mejor su objetivo. "
+       "En la variante B, en cada decisión los pares intercambian información. Hacerlo comparando cada par con todos los "
+       "demás sería cuadrático, así que usamos un bloque ISAB (Lee et al., 2019): 16 puntos aprendidos resumen el conjunto "
+       "de pares y luego cada par lee esos resúmenes. Así la comunicación cuesta O(n·m) en vez de O(n²).", {})])
+para([b("¿Por qué ISAB? "),
+      ("Lo elegimos frente a LUNA (Ma et al., 2021) porque el estado es un conjunto sin orden que cambia en cada paso, sin "
+       "una memoria que deba conservarse, que es lo que aporta LUNA. Tampoco usamos atención dispersa, porque necesitaría "
+       "una regla para decidir qué pares conectar, y ese papel ya lo cumple la pista de MMR de la variante A. Así, cada "
+       "variante prueba una sola idea.", {})])
 
-# ================================================================ 4. configuración
-doc.add_heading("4. Configuración experimental (punto 4)", level=1)
+figure(F("arq_variante_B.png"), TEXT_W * 0.78,
+       "Figura 4. Variante B: el resumen del estado de la base se reemplaza por un bloque ISAB sobre los pares disponibles "
+       "(en verde).")
+# ================================================================ 4. entrenamiento
+doc.add_heading("4. Entrenamiento (punto 4)", level=1)
 cfg = R["train_cfg"]
-table([["Hiperparámetro", "Valor (igual para los tres modelos)"],
-       ["d / cabezas / capas del encoder / FF", "64 / 4 / 2 / 64 → 128 → 64"],
-       ["Normalización · recorte de logits", "LayerNorm post-residual · C = 10"],
-       ["Inicialización del puntero", "W_r = 0 (los logits parten en 0)"],
-       ["Datos", f"{miles(R['n_train'])} instancias 10×8 de entrenamiento ({miles(R['n_train_decisions'])} decisiones), "
-                 f"300 de validación ({miles(R['n_val_decisions'])}); mismas semillas que en las tareas anteriores"],
-       ["Optimizador", f"Adam, lr = {cfg['lr']:g}; ReduceLROnPlateau (factor {num(cfg['lr_factor'], 1)}, paciencia "
-                       f"{cfg['lr_patience']}, mínimo {cfg['lr_min']:g}), como sl_train del material"],
-       ["Batch · recorte de gradiente", f"{cfg['batch_size']} instancias ({cfg['batch_size'] * 10} decisiones) · norma "
-                                        f"{num(cfg['grad_clip'], 1)}"],
-       ["Épocas · early stopping", f"máx. {cfg['max_epochs']} · paciencia {cfg['patience']} sobre la pérdida de validación "
-                                   "(restaura la mejor época)"],
-       ["Pérdida", "entropía cruzada sobre los W·T logits enmascarados (teacher forcing)"],
-       ["Semillas", f"{NSEED} (inicialización y orden de los batches); los datos son los mismos"],
-       ["Específicos de cada variante", "A: α inicia en 1 y α^(l,dir,h) en 0 · B: m = 16 puntos inductores"],
-       ["Parámetros entrenables", " · ".join(f"{n}: {miles(PAR[n])}" for n in MODELS)]],
-      [5.2, TEXT_W - 5.6], size=9)
+para([(f"Los tres modelos se entrenaron exactamente igual: con los mismos datos ({miles(R['n_train'])} instancias de "
+       f"10×8 resueltas por el experto y {miles(R['n_val_decisions'] // DEC_PER_INST)} de validación), el mismo optimizador "
+       f"y la misma tasa de aprendizaje, hasta {cfg['max_epochs']} épocas con parada temprana (el entrenamiento se detiene "
+       f"si deja de mejorar) y {NSEED} semillas por modelo. La lista completa de hiperparámetros está en el notebook.",
+       {})])
 
 # ================================================================ 5. convergencia
 doc.add_heading("5. Convergencia (punto 5)", level=1)
-figure(F("convergencia.png"), TEXT_W,
-       f"Figura 5. Curvas por época (línea = media de {NSEED} semillas; banda = mínimo–máximo). La época 0 es el modelo sin "
-       "entrenar; el gap de validación se mide con el rollout greedy en 100 instancias.")
-
-
-def lst(v):
-    v = [x for x in v if x is not None]
-    return "–".join(str(x) for x in (sorted(set(v)) if len(set(v)) <= 1 else [min(v), max(v)])) if v else "no alcanza"
-
-
-rows = [["Modelo", "Gap val. época 0", "Épocas hasta gap < 3 %", "Épocas hasta pérdida < 0,35", "Mejor época",
-         "Mejor pérdida val. (media ± desv.)", "Oscilación del gap (pp)", "s / época", "Minutos hasta gap < 3 %"]]
+para([("La Figura 5 muestra las curvas de entrenamiento y la tabla resume la velocidad de cada modelo:", {})], keep=True)
+rows = [["Modelo", "Gap antes de entrenar", "Épocas hasta gap\u00a0<\u00a03\u00a0%", "Mejor pérdida de validación", "Segundos por época"]]
 for n in MODELS:
     cv = CONV[n]
-    rows.append([n, pct(cv["gap_init"], 1), lst(cv["epoch_gap_below_3"]), lst(cv["epoch_loss_below_035"]),
-                 lst(cv["best_epoch"]), pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3),
-                 num(cv["oscillation_gap"], 2), num(cv["sec_per_epoch"], 1), num(cv["minutes_to_gap3"], 1)])
-table(rows, [2.5, 1.6, 1.8, 1.9, 1.5, 2.5, 2.0, 1.3, 1.9], size=8.3, fills=[FILL[n] for n in MODELS],
-      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 8)
-para([("Épocas: rango entre las semillas. Oscilación del gap: promedio de |Δ gap de validación| entre épocas consecutivas en "
-       "las últimas 10 épocas, en puntos porcentuales. Minutos: tiempo de reloj medio hasta el primer gap de validación "
-       "< 3 % (CPU, incluye la validación de cada época).", {"italic": True, "color": MUTED, "size": 9})])
+    rows.append([n, pct(cv["gap_init"], 0 if cv["gap_init"] > 100 else 1), ep_rng(cv["epoch_gap_below_3"]),
+                 pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3), num(cv["sec_per_epoch"], 1)])
+table(rows, [3.4, 3.2, 3.4, 4.2, 3.0], size=9, fills=[FILL[n] for n in MODELS],
+      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 4)
+note(f"Épocas: rango entre las {NSEED} semillas. Pérdida: promedio ± desviación entre semillas (menor es mejor).")
 cb, ca, cB = CONV["Base"], CONV[A_], CONV[B_]
-para([b("Punto de partida. "),
-      (f"Sin entrenar, la base y B tienen logits constantes (W_r = 0), así que el rollout greedy asigna todas las armas al "
-       f"primer objetivo (gap {pct(cb['gap_init'], 0)}). Gracias al sesgo de salida, A parte exactamente desde la política "
-       f"de MMR (gap {pct(ca['gap_init'], 1)} y accuracy {pct(100 * ACC0_A, 0)}).", {})])
-para([b("Velocidad. "),
-      (f"La ventaja inicial de A dura una época: tras la primera, los tres modelos ya superan a MMR (gap de validación "
-       f"{rngn(EP1)} %) y las curvas de la base y de A casi coinciden (gap medio de las épocas 1–10: "
-       f"{num(gwin('Base', 1, 10))} % y {num(gwin(A_, 1, 10))} %; B {num(gwin(B_, 1, 10))} %). Medida en épocas, A llega "
-       f"a un gap < 3 % en {lst(ca['epoch_gap_below_3'])}, la base en {lst(cb['epoch_gap_below_3'])} y B en "
-       f"{lst(cB['epoch_gap_below_3'])}. En la pérdida el orden cambia: B es la que baja más rápido (pérdida < 0,35 en "
-       f"{lst(cB['epoch_loss_below_035'])} épocas, contra {lst(ca['epoch_loss_below_035'])} de A y "
-       f"{lst(cb['epoch_loss_below_035'])} de la base) y la que termina más abajo, con la mayor accuracy de validación "
-       f"({rngn([100 * x for x in cB['best_val_acc']])} % frente a "
-       f"{rngn([100 * x for x in cb['best_val_acc'] + ca['best_val_acc']])} %). En tiempo de reloj, en cambio, una época "
-       f"de B cuesta {num(SEC[B_] / SEC['Base'], 1)} veces más ({num(SEC[B_], 1)} s frente a "
-       f"{rngn([SEC['Base'], SEC[A_]])} s): necesita {num(cB['minutes_to_gap3'], 1)} min para llegar a un gap < 3 %, "
-       f"contra {rngn([cb['minutes_to_gap3'], ca['minutes_to_gap3']])} min de la base y de A, y sus {NSEED} semillas "
-       f"tomaron {num(TRAIN_MIN[B_], 0)} min de entrenamiento, contra {rngn([TRAIN_MIN['Base'], TRAIN_MIN[A_]], 0)} min.",
-       {})])
-para([b("Estabilidad. "),
-      (f"Las {NRUN} corridas convergen sin divergencias: la mejor pérdida de validación varía poco entre semillas "
-       f"(desviación {rngn([CONV[n]['best_val_loss_std'] for n in MODELS], 3)}) y, en el tramo final, la pérdida oscila "
-       f"≈ {num(np.mean([CONV[n]['oscillation'] for n in MODELS]), 3)} entre épocas. El gap del rollout es más ruidoso "
-       f"({rngn([CONV[n]['oscillation_gap'] for n in MODELS], 2)} pp entre épocas consecutivas; la base es la más "
-       "estable) porque depende de unas pocas decisiones críticas por instancia. Por lo mismo, la menor pérdida de B no se "
-       "traduce en un menor gap de validación: los tres terminan en niveles parecidos (media de las últimas 10 épocas: base "
-       f"{num(glast('Base'))} %, A {num(glast(A_))} % y B {num(glast(B_))} %). El early stopping "
-       f"se activó en {EARLY} de las {NRUN} corridas; las otras {len(FULL_BEST)} llegaron al máximo de {MAXEP} épocas con "
-       f"la mejor época entre la {min(FULL_BEST)} y la {max(FULL_BEST)}, es decir, todavía mejoraban levemente. Como el "
-       "presupuesto es el mismo para los tres modelos, la comparación es justa.", {})])
-para([b("Pesos α de la variante A (Figura 6). "),
-      (f"El peso del sesgo de salida crece de 1 a {rngn(ALPHA_BEST)} y {int((AENC > 0).sum())} de los {AENC.size} pesos "
-       f"del sesgo atencional (semilla 0) terminan positivos; el mayor ({num(AENC.max())}) está en la capa {AMAX[0] + 1}, "
-       f"en la atención {('de cada arma sobre los objetivos', 'de cada objetivo sobre las armas')[AMAX[1]]}. El modelo usa "
-       "el criterio de MMR en el encoder y en el decoder, y le da cada vez más peso.", {})])
-if os.path.exists(F("alpha.png")):
-    figure(F("alpha.png"), TEXT_W * 0.9,
-           "Figura 6. Variante A: evolución del peso α del sesgo de salida y pesos del sesgo atencional aprendidos (semilla 0).")
+bullet([b("Velocidad, en épocas. "),
+        (f"A parte con ventaja: como arranca imitando a MMR, su gap antes de entrenar es {pct(ca['gap_init'], 1)}, contra "
+         f"{pct(cb['gap_init'], 0)} de los otros dos (sin entrenar, mandan todas las armas al mismo objetivo). Pero la "
+         "ventaja dura poco: después de la primera época los tres ya superan a MMR y llegan a un gap menor a 3 % en "
+         f"{min(EP_GAP3)} a {max(EP_GAP3)} épocas.", {})])
+bullet([b("Velocidad, en tiempo real. "),
+        (f"B es la que más rápido baja la pérdida y la que termina más abajo, pero cada época le toma "
+         f"{num(SEC[B_] / SEC['Base'], 1)} veces más ({num(SEC[B_], 1)} s contra {rngn([SEC['Base'], SEC[A_]])} s): medida "
+         "en minutos, es la más lenta.", {})])
+bullet([b("Estabilidad. "),
+        (f"Las {NRUN} corridas ({len(MODELS)} modelos × {NSEED} semillas) convergieron sin saltos ni divergencias, y las "
+         "semillas de un mismo modelo terminan muy cerca. Al final, los tres llegan a un gap de validación parecido "
+         f"({rngn([glast(n) for n in MODELS], 2)} % en las últimas 10 épocas): la menor pérdida de B no se tradujo en "
+         "mejores soluciones.", {})])
+bullet([b("La pista de MMR se usa. "),
+        (f"El peso α con que la variante A suma la pista de MMR subió de 1 a {rngn(ALPHA_BEST)} durante el entrenamiento: "
+         "el modelo aprendió a confiar más en ella.", {})])
 
+figure(F("convergencia.png"), TEXT_W * 0.88,
+       f"Figura 5. Curvas de entrenamiento por época (línea = promedio de {NSEED} semillas; banda = mínimo y máximo). Abajo "
+       "a la derecha, el gap de las soluciones que construye cada modelo en 100 instancias de validación; la línea naranja "
+       "es MMR.")
 # ================================================================ 6. evaluación
 doc.add_heading("6. Evaluación con instancias de distintos tamaños (punto 6)", level=1)
-para([("Los modelos se entrenaron solo con 10×8 y se evalúan sin cambios en ", {}), (f"{len(SIZES)} tamaños", {"bold": True}),
-      (", con las mismas instancias del proyecto del módulo 2 (30 por tamaño; las 50 de prueba en 10×8), de modo que la columna "
-       "\"Módulo 2\" es directamente comparable; 50×40 y 100×80 son nuevos. La referencia es el experto ILS de las tareas "
-       "anteriores (óptimo en todas las instancias verificadas de 5×4 y 10×8): gap = 100·(costo/costo ILS − 1). Se evalúan "
-       f"los {NSEED} modelos entrenados de cada arquitectura (una por semilla) con el rollout greedy, que verificamos idéntico "
-       f"al GreedyAgent de eda; la tabla reporta la media y la desviación estándar sobre las {NSEED} semillas × las "
-       "instancias de cada tamaño, y más abajo se muestra la variación entre semillas.", {})])
-hdr = ["Tamaño", "W·T"] + MODELS + ["MMR", "Aleatorio", "Módulo 2"]
-rows = [hdr]
+para([(f"Los modelos se entrenaron solo con instancias de 10×8 y los probamos, sin cambios, en {len(SIZES)} tamaños, de "
+       f"{SIZES[0]} a {SIZES[-1]}. Usamos las mismas instancias que el proyecto del módulo 2 (30 por tamaño; las 50 de "
+       "prueba en 10×8), así que la columna «Módulo 2» es directamente comparable. Cada valor es el gap respecto del "
+       f"experto: promedio ± desviación estándar sobre las {NSEED} semillas y todas las instancias.", {})], keep=True)
+rows = [["Tamaño"] + MODELS + ["MMR", "Módulo 2"]]
 for l in SIZES:
-    Wl, Tl = map(int, l.split("×"))
     best = best_model(l)
-    row = [l, str(Wl * Tl)]
-    for n in MODELS:
-        row.append([(pm(EV[l][n]["mean"], EV[l][n]["std"]), {"bold": n == best})])
-    row += [pm(EV[l]["MMR"]["mean"], EV[l]["MMR"]["std"]), pm(EV[l]["Aleatorio"]["mean"], EV[l]["Aleatorio"]["std"], 0),
-            pm(*REF2[l]) if l in REF2 else "—"]
-    rows.append(row)
-table(rows, [1.6, 1.1, 2.4, 2.4, 2.4, 2.3, 2.6, 2.3], size=8.5,
-      aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 7)
-para([(f"Gap vs el experto ILS (%), media ± desviación estándar sobre {NSEED} semillas × instancias (MMR y el constructivo "
-       "aleatorio son deterministas: solo instancias); en negrita, el mejor de los tres modelos en cada tamaño. La columna "
-       "Módulo 2 es un único modelo, evaluado en las mismas instancias.", {"italic": True, "color": MUTED, "size": 9})])
-rows = [["Tamaño"] + [f"{n}: media ± desv. entre semillas (rango)" for n in MODELS]]
-for l in SIZES:
-    row = [l]
-    for n in MODELS:
-        sm = EV[l][n]["seed_means"]
-        row.append(f"{pm(np.mean(sm), np.std(sm))}  ({num(min(sm))}–{num(max(sm))})")
-    rows.append(row)
-para([b("Variación entre semillas. "),
-      ("Gap medio de cada uno de los modelos entrenados, resumido por arquitectura:", {})], keep=True)
-table(rows, [1.8, 5.2, 5.2, 5.2], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 3)
-figure(F("tamanos.png"), TEXT_W,
-       f"Figura 7. Gap medio por tamaño: barras = media de {NSEED} semillas × instancias, barras de error = ±1 desviación "
-       "estándar, puntos negros = gap medio de cada semilla.")
-figure(F("comparacion.png"), TEXT_W,
-       f"Figura 8. Izquierda: distribución del gap en las 50 instancias de prueba 10×8 × {NSEED} semillas. Derecha: gap medio "
-       "por tamaño (banda = rango entre semillas).")
-d10 = EV["10×8"]
-table([[f"Método (prueba 10×8; {NSEED} × 50 ejecuciones)", "Gap medio", "Desv.", "Mediana", "% óptimo", "Gana a MMR"],
-       *[[n, pct(d10[n]["mean"]), num(d10[n]["std"]), pct(d10[n]["median"]), pct(d10[n]["pct_optimal"], 0),
-          pct(d10[n]["wins_vs_mmr"], 0)] for n in MODELS + ["MMR"]],
-       ["Módulo 2 (proyecto, 1 modelo)", pct(REF2["10×8"][0]), num(REF2["10×8"][1]), "1,85 %", "30 %", "72 %"]],
-      [5.4, 2.1, 1.8, 2.1, 2.1, 2.4], size=9, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5,
-      fills=[FILL[n] for n in MODELS] + [FILL["MMR"], FILL["Módulo 2"]])
-if REFL:
-    rows = [["Tamaño", "ILS largo mejora al ILS de referencia en"] + [f"{n} vs ILS largo" for n in MODELS] + ["MMR vs ILS largo"]]
-    for l, dd in REFL.items():
-        rows.append([l, pct(dd["mejora_ils_largo"])] + [pct(dd["gap_vs_ils_largo"][n]) for n in MODELS + ["MMR"]])
-    para([b("¿Qué tan buena es la referencia en instancias grandes? "),
-          ("Repetimos el ILS con 2 000 iteraciones y perturbación proporcional a W en los tres tamaños más grandes:", {})],
-         keep=True)
-    table(rows, [1.7, 3.6, 2.6, 2.7, 2.6, 2.6], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
-TCOLS = MODELS + ["MMR", "Experto ILS"]
-para([b("Tiempo de inferencia. "),
-      ("Milisegundos por instancia, con el rollout por lotes en CPU (todos los hilos; modelos de la semilla 0):", {})],
-     keep=True)
-def ms(v):
-    return miles(int(round(v))) if v >= 100 else num(v, 2 if v < 10 else 1)
-
-
-table([["Tamaño"] + TCOLS] + [[l] + [ms(TT[l][n]) for n in TCOLS] for l in SIZES],
-      [2.0, 2.6, 2.6, 2.6, 2.4, 2.6], size=8.5, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
-
-l50, l100 = "50×40", "100×80"
-gap_mod2 = {l: [REF2[l][0] - gm(l, n) for n in MODELS] for l in SMALL}
-mmr_small = [gm(l, "MMR") for l in SMALL]
+    rows.append([l] + [[(pm(gm(l, n), EV[l][n]["std"]), {"bold": n == best})] for n in MODELS] +
+                [pm(gm(l, "MMR"), EV[l]["MMR"]["std"]), pm(*REF2[l]) if l in REF2 else "—"])
+table(rows, [2.2, 3.0, 3.0, 3.0, 3.0, 3.0], size=9, aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 5)
+rand = [gm(l, "Aleatorio") for l in SIZES]
+note(f"Gap (%) respecto del experto ILS; menor es mejor. En negrita, el mejor de los tres modelos en cada tamaño. Como "
+     f"referencia, asignar las armas al azar da gaps de {num(min(rand), 0)} a {num(max(rand), 0)} %. La Figura 6, al "
+     "final de la sección, muestra los mismos datos en barras.")
 models_small = [gm(l, n) for l in SMALL for n in MODELS]
-para([b("Análisis — tamaño de entrenamiento (10×8). "),
-      (f"Los tres modelos superan a MMR por al menos {num(gm(t10, 'MMR') - max(gm(t10, n) for n in MODELS), 1)} pp "
-       f"({rngn([gm(t10, n) for n in MODELS], 2)} % frente a {pct(gm(t10, 'MMR'))}) y al modelo del módulo 2 "
-       f"({pct(REF2[t10][0])}), que además recibía features heurísticas. Sus medias son muy parecidas: la diferencia "
-       f"máxima ({num(SPREAD[t10])} pp) es menor que la variación entre semillas de una misma arquitectura (hasta "
-       f"{num(max(seed_rng(t10, n) for n in MODELS))} pp, en {max(MODELS, key=lambda n: seed_rng(t10, n)).split(' ·')[0]}). "
-       f"La distribución sí cambia: B iguala al experto en el {pct(d10[B_]['pct_optimal'], 0)} de las ejecuciones (base "
-       f"{pct(d10['Base']['pct_optimal'], 0)}, A {pct(d10[A_]['pct_optimal'], 0)}), su mediana es "
-       f"{pct(d10[B_]['median'])} (base {pct(d10['Base']['median'])}, A {pct(d10[A_]['median'])}) y pierde contra MMR solo "
-       f"en el {pct(lose(t10, B_), 0)} de los casos (base {pct(lose(t10, 'Base'), 0)}, A {pct(lose(t10, A_), 0)}). Su media "
-       "no mejora porque, cuando se equivoca, lo hace por montos parecidos a los de los otros modelos.", {})])
-para([b("Generalización de tamaño. "),
-      (f"Entrenados solo con 10×8, los tres modelos se mantienen entre {pct(min(models_small), 1)} y "
-       f"{pct(max(models_small), 1)} hasta {SMALL[-1]}, mientras MMR queda entre {pct(min(mmr_small), 1)} y "
-       f"{pct(max(mmr_small), 1)}. Mejoran al módulo 2 en todos los tamaños compartidos: por "
-       f"{rngn(gap_mod2['5×4'] + gap_mod2[t10])} pp en 5×4 y 10×8, y por "
-       f"{rngn([x for l in SMALL[2:] for x in gap_mod2[l]])} pp en {lista(SMALL[2:])}, donde el modelo anterior se "
-       "degradaba más.", {})])
-n50 = sum(BEAT_MMR[l50].values())
-para([b("Instancias grandes. "),
-      (f"En {l50} y {l100}, MMR mejora mucho ({pct(gm(l50, 'MMR'))} y {pct(gm(l100, 'MMR'))}) y la referencia se "
-       f"debilita: un ILS de 2 000 iteraciones mejora al de referencia en {pct(REFL[l50]['mejora_ils_largo'])} y "
-       f"{pct(REFL[l100]['mejora_ils_largo'])}. " +
-       ("Todos los modelos entrenados" if n50 == NRUN else f"{n50} de los {NRUN} modelos entrenados") +
-       f" superan a MMR en {l50}, pero en {l100} MMR queda mejor que la media de las tres arquitecturas "
-       f"({rngn([gm(l100, n) for n in MODELS], 2)} %) y solo {sum(BEAT_MMR[l100].values())} de los {NRUN} modelos lo "
-       "superan" + (" (uno por arquitectura)" if set(BEAT_MMR[l100].values()) == {1} else "") +
-       ". Medido contra el ILS largo (tabla anterior), el orden de los métodos no cambia.", {})])
-para([b("Diferencias entre arquitecturas. "),
-      (f"En cada tamaño, las medias de las tres arquitecturas difieren en a lo más {num(max(SPREAD.values()), 1)} pp, del "
-       f"mismo orden que la variación entre semillas (desviación de {num(min(SEED_STD), 1)} a {num(max(SEED_STD), 1)} pp), "
-       f"así que ninguna domina. La base es la mejor en {len(WINNERS['Base'])} de los {len(SIZES)} tamaños "
-       f"({lista(WINNERS['Base'])}) y B en {len(WINNERS[B_])} ({lista(WINNERS[B_])}); en {l100}, B gana a MMR en el "
-       f"{pct(EV[l100][B_]['wins_vs_mmr'], 0)} de las ejecuciones, contra "
-       f"{rngn([EV[l100][n]['wins_vs_mmr'] for n in ('Base', A_)], 0)} % de la base y A. A queda a ±"
-       f"{num(max(abs(gm(l, A_) - gm(l, 'Base')) for l in SIZES), 1)} pp de la base en todos los tamaños. B es la más "
-       f"sensible a la semilla en {lista(B_MOST_VAR)} (rangos " +
-       " y ".join(f"{rngn(EV[l][B_]['seed_means'], 2)} %" for l in B_MOST_VAR) + ").", {})])
-para([b("Tiempo. "),
-      (f"En 10×8 los modelos resuelven una instancia en {rngn([TT[t10][n] for n in MODELS])} ms, entre "
-       f"{num(min(TT[t10]['Experto ILS'] / TT[t10][n] for n in MODELS), 0)} y "
-       f"{num(max(TT[t10]['Experto ILS'] / TT[t10][n] for n in MODELS), 0)} veces más rápido que el ILS "
-       f"({num(TT[t10]['Experto ILS'], 1)} ms). Pero el rollout son W pasos de costo O(n·d): en {l100} tarda "
-       f"{rngn([TT[l100]['Base'], TT[l100][A_]], 0)} ms con la base y A, y {num(TT[l100][B_] / 1e3, 1)} s con B, más que el "
-       f"ILS de 100 iteraciones ({num(TT[l100]['Experto ILS'], 0)} ms).", {})])
+mmr_small = [gm(l, "MMR") for l in SMALL]
+t_models10 = [TT[t10][n] for n in MODELS]
+speed10 = [TT[t10]["Experto ILS"] / TT[t10][n] for n in MODELS]
+bullet([b("En el tamaño de entrenamiento (10×8), "),
+        (f"los tres modelos quedan entre {pct(min(gm(t10, n) for n in MODELS))} y {pct(max(gm(t10, n) for n in MODELS))}, "
+         f"muy por debajo de MMR ({pct(gm(t10, 'MMR'))}) y mejor que el modelo del módulo 2 ({pct(REF2[t10][0])}).", {})])
+bullet([b("En tamaños que no vieron al entrenar, "),
+        (f"siguen funcionando bien: hasta {SMALL[-1]} se mantienen entre {pct(min(models_small), 1)} y "
+         f"{pct(max(models_small), 1)} (MMR: {rngn(mmr_small)} %) y mejoran al módulo 2 en todos los tamaños "
+         "comparables.", {})])
+bullet([b("En las instancias más grandes, "),
+        (f"MMR se vuelve muy bueno: en 50×40 los modelos todavía le ganan, pero en 100×80 MMR "
+         f"({pct(gm('100×80', 'MMR'))}) queda levemente mejor en promedio. Ahí el propio experto ya no es óptimo: una "
+         f"búsqueda 20 veces más larga lo mejora en {rngn([d['mejora_ils_largo'] for d in REFL.values()])} %.", {})])
+bullet([b("Entre las tres arquitecturas "),
+        (f"las diferencias son pequeñas (a lo más {num(SPREAD, 1)} puntos) y del mismo tamaño que las diferencias entre "
+         "semillas, así que ninguna gana claramente. Lo que distingue a B es que encuentra la misma solución que el "
+         f"experto con más frecuencia: en el {pct(d10[B_]['pct_optimal'], 0)} de las ejecuciones de 10×8, contra "
+         f"{rngn([d10['Base']['pct_optimal'], d10[A_]['pct_optimal']], 0)} % de las otras dos.", {})])
+bullet([b("En tiempo, "),
+        ((f"en 10×8 cada modelo resuelve una instancia en menos de 1 ms" if max(t_models10) < 1 else
+          f"en 10×8 cada modelo resuelve una instancia en {rngn(t_models10)} ms") +
+         f", entre {num(min(speed10), 0)} y {num(max(speed10), 0)} veces más rápido que el experto. En 100×80, en cambio, "
+         "son más lentos que él, porque el modelo toma W decisiones y cada una revisa todos los pares.", {})])
 
+figure(F("tamanos.png"), TEXT_W,
+       "Figura 6. Gap por tamaño: la barra es el promedio, la línea vertical ±1 desviación estándar y los puntos negros, el "
+       "promedio de cada semilla.")
 # ================================================================ 7. conclusiones
 doc.add_heading("7. Conclusiones", level=1)
-bullet([b("Responsabilidades separadas. "),
-        ("El rediseño cumple la definición de la tarea: el encoder solo ve V", {}), ("j", {"sub": True}), (" y p", {}),
-        ("ij", {"sub": True}),
-        (" (token aprendible para las armas y la matriz como aristas) y corre una vez por instancia; el estado entra solo "
-         "al decoder. Sin las features heurísticas "
-         "del módulo 2, la base supera a MMR desde la primera época y mejora al módulo 2 en los "
-         f"{len(SMALL)} tamaños compartidos ({pct(gm(t10, 'Base'))} frente a {pct(REF2[t10][0])} en 10×8; "
-         f"{rngn([gm(l, 'Base') for l in SMALL[2:]], 2)} % frente a {rngn([REF2[l][0] for l in SMALL[2:]], 2)} % entre "
-         f"{SMALL[2]} y {SMALL[-1]}).", {})])
-bullet([b("Complejidad. "),
-        (f"El encoder es lineal en n = W·T (atención bipartita) y se paga una vez; el decoder es lineal por paso (pendiente "
-         f"medida {num(SL['Base'])} frente a {num(SL['Módulo 2'])} del módulo 2), así que una instancia 50×40 se resuelve "
-         f"{num(SPD['50×40'], 0)} veces más rápido que con el modelo anterior. La interacción entre pares de la variante B "
-         f"sería cuadrática (pendiente {num(SL['B con atención completa'])}) y con ISAB queda lineal (pendiente "
-         f"{num(SL[B_])}, o {num(SL_SIN[B_])} sin el tamaño más grande). El límite que queda es el número de pasos: W pasos "
-         "de O(n·d) por instancia, que en 100×80 ya "
-         "es más lento que el ILS.", {})])
-bullet([b("Sesgo inductivo (A). "),
-        (f"Con la ganancia de MMR como sesgo, el modelo parte desde MMR ({pct(ca['gap_init'], 1)} en vez de "
-         f"{pct(cb['gap_init'], 0)}), llega un poco antes a los umbrales (gap < 3 % en {lst(ca['epoch_gap_below_3'])} "
-         f"épocas frente a {lst(cb['epoch_gap_below_3'])}) y los α aprendidos crecen, así que el modelo sí usa el criterio. "
-         "Pero la base aprende lo mismo en una época y la calidad final es equivalente (diferencias de a lo más "
-         f"{num(max(abs(gm(l, A_) - gm(l, 'Base')) for l in SIZES), 1)} pp, dentro de la variación entre semillas): en "
-         "este problema, el sesgo acelera el inicio pero no cambia el resultado final.", {})])
-bullet([b("Atención eficiente (B). "),
-        (f"Que los pares interactúen con ISAB da la menor pérdida, la mayor accuracy y más soluciones exactas "
-         f"({pct(d10[B_]['pct_optimal'], 0)} iguales al experto en 10×8 y solo {pct(lose(t10, B_), 0)} de derrotas contra "
-         f"MMR), pero no un menor gap medio, y cuesta {num(SEC[B_] / SEC['Base'], 0)} veces más por época y hasta "
-         f"{num(TT['100×80'][B_] / TT['100×80']['Base'], 0)} veces más en inferencia.", {})])
-bullet([b("Recomendación. "),
-        ("Con estos datos, la base es la mejor relación entre calidad y costo; A conviene si el presupuesto de "
-         "entrenamiento es muy corto (parte desde MMR) y B si importa resolver exactamente más instancias. Como trabajo "
-         "futuro, proponemos entrenar con varios tamaños (en 50×40 y 100×80 MMR se acerca) y combinar A y B.", {})])
+bullet([b("El rediseño funciona. "),
+        ("Separar un encoder que lee la instancia una vez de un decoder que decide paso a paso dio un modelo más preciso que "
+         f"el del módulo 2 en todos los tamaños comparables y {num(SPD['50×40'], 0)} veces más rápido en 50×40.", {})])
+bullet([b("El costo es lineal. "),
+        ("Cada decisión crece en proporción al número de pares, que es lo mínimo posible; la variante B mantiene esa "
+         "propiedad gracias a ISAB.", {})])
+bullet([b("La pista de MMR (A) ayuda al comienzo, "),
+        ("porque el modelo parte desde una buena política, pero no mejora el resultado final: la base aprende lo mismo en "
+         "una época.", {})])
+bullet([b("La comunicación entre pares (B) "),
+        ("logra más soluciones iguales a las del experto, pero no un gap promedio menor, y entrenarla cuesta "
+         f"{num(SEC[B_] / SEC['Base'], 0)} veces más. Con estos resultados, la base es la opción con mejor relación entre "
+         "calidad y costo.", {})])
 
 doc.add_heading("Referencias", level=1)
 refs = ["Ahuja, R. K., Kumar, A., Jha, K. C. y Orlin, J. B. (2007). Exact and heuristic algorithms for the weapon-target "
         "assignment problem. Operations Research, 55(6), 1136–1146.",
         "den Broeder, G. G., Ellison, R. E. y Emerling, L. (1959). On optimum target assignments. Operations Research, 7(3), "
         "322–326.",
-        "Kline, A., Ahner, D. y Hill, R. (2019). The weapon-target assignment problem. Computers & Operations Research, 105, "
-        "226–236.",
-        "Kool, W., van Hoof, H. y Welling, M. (2019). Attention, learn to solve routing problems! ICLR.",
-        "Kwon, Y.-D., Choo, J., Yoon, I., Park, M., Park, D. y Gwon, Y. (2021). Matrix encoding networks for neural "
-        "combinatorial optimization. NeurIPS.",
         "Lee, J., Lee, Y., Kim, J., Kosiorek, A., Choi, S. y Teh, Y. W. (2019). Set Transformer: a framework for "
         "attention-based permutation-invariant neural networks. ICML.",
         "Ma, X., Kong, X., Wang, S., Zhou, C., May, J., Ma, H. y Zettlemoyer, L. (2021). Luna: Linear unified nested "
         "attention. NeurIPS.",
-        "Material del curso (TSP-Framework): notebooks de sesgo inductivo, atención lineal (LUNA, ISAB), esparsificación y GAT/EGAT."]
+        "Material del curso (TSP-Framework): notebooks de sesgo inductivo, atención lineal (LUNA, ISAB) y esparsificación."]
 for r_ in refs:
     p = para(r_, size=9, space_after=3)
     p.paragraph_format.left_indent = Cm(0.6)
