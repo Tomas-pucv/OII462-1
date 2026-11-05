@@ -197,6 +197,8 @@ def page_break():
 
 
 def num(v, d=2):
+    if v is None:
+        return "—"
     return f"{v:.{d}f}".replace(".", ",")
 
 
@@ -450,7 +452,7 @@ for n in MODELS:
     rows.append([n, pct(cv["gap_init"], 1), lst(cv["epoch_gap_below_3"]), lst(cv["epoch_loss_below_035"]),
                  lst(cv["best_epoch"]), pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3),
                  num(cv["oscillation_gap"], 2), num(cv["sec_per_epoch"], 1), num(cv["minutes_to_gap3"], 1)])
-table(rows, [2.5, 1.6, 1.8, 1.9, 1.6, 2.6, 1.8, 1.4, 1.9], size=8.3, fills=[FILL[n] for n in MODELS],
+table(rows, [2.5, 1.6, 1.8, 1.9, 1.5, 2.5, 2.0, 1.3, 1.9], size=8.3, fills=[FILL[n] for n in MODELS],
       aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 8)
 para([("Épocas: rango entre las semillas. Oscilación del gap: promedio de |Δ gap de validación| entre épocas consecutivas en "
        "las últimas 10 épocas, en puntos porcentuales. Minutos: tiempo de reloj medio hasta el primer gap de validación "

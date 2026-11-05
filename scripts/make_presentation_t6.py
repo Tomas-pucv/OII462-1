@@ -200,6 +200,8 @@ def crop(path, name, box_frac):
 
 
 def num(v, d=2):
+    if v is None:
+        return "—"
     return f"{v:.{d}f}".replace(".", ",")
 
 
@@ -387,11 +389,11 @@ def rng_(v):
     return "–".join(str(x) for x in sorted({min(v), max(v)})) if v else "—"
 
 
-rows = [["", "Gap val. época 0", "Épocas a loss < 0,35", "Mejor loss val.", "Min a gap < 3 %"]]
+rows = [["", "Gap val. época 0", "Épocas a loss<0,35", "Mejor loss val.", "Min a gap<3 %"]]
 for n in MODELS:
     rows.append([n, pct(h0[n]["gap_init"], 0), rng_(h0[n]["epoch_loss_below_035"]),
                  pm(h0[n]["best_val_loss_mean"], h0[n]["best_val_loss_std"], 3), num(h0[n]["minutes_to_gap3"], 1)])
-table(s, 8.85, 1.45, 4.1, rows, [1.2, 0.72, 0.75, 0.83, 0.6], row_h=0.5, size=9,
+table(s, 8.85, 1.45, 4.1, rows, [1.1, 0.62, 0.68, 1.05, 0.65], row_h=0.5, size=9,
       fills=[PALE[n] for n in MODELS], aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 4)
 text(s, 8.85, 3.6, 4.1, 3.3, "CONV_BULLETS", size=11.5)
 
