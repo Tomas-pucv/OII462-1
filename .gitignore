@@ -1,4 +1,5 @@
 # temporales de los scripts que generan informes y presentaciones
 figuras*/_tmp*/
-# pesos que guarda el notebook de la Tarea 6 (no se versionan)
-modelos_t6.pt
+# pesos que guardan los notebooks de las Tareas 6 y 7 (no se versionan)
+modelos_t*.pt
+__pycache__/
