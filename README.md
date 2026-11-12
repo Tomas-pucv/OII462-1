@@ -4,11 +4,61 @@ Modelos neuronales que aprenden a construir soluciones del **Weapon-Target Assig
 imitando, paso a paso, las decisiones de un algoritmo experto (Búsqueda Local Iterada, verificada
 contra un método exacto).
 
+- **Tarea 7:** el WTAP como grafo bipartito, encoder EGAT con el decoder de la Tarea 6 y ablación de profundidad
+  (1, 2 y 3 capas).
 - **Tarea 6:** encoder estático (1 vez por instancia) con decoder lineal, análisis de complejidad y dos variantes:
   sesgo inductivo con MMR y decoder con atención eficiente (ISAB).
 - **Proyecto del módulo:** presentación final (13–15 min) del Transformer encoder–decoder con puntero.
 - **Tarea 5:** encoder con self-attention y capa de decisión tipo *pointer* (acciones = pares arma → objetivo).
 - **Tarea 4:** MLP de capas densas (armas en orden fijo).
+
+---
+
+## Tarea 7 — El WTAP como grafo: encoder EGAT y profundidad
+
+### Entregables
+
+| Entregable | Archivo |
+|---|---|
+| Informe (puntos 1, 2, 4, 5 y 6) | [`Tarea7_WTAP_informe.pdf`](Tarea7_WTAP_informe.pdf) · [`.docx` editable](Tarea7_WTAP_informe.docx) |
+| Notebook (Colab, puntos 2–6) | [`Tarea7_WTAP_egat.ipynb`](Tarea7_WTAP_egat.ipynb) — [abrir en Colab](https://colab.research.google.com/github/Tomas-pucv/OII462-1/blob/claude/charming-allen-rfvy3q/Tarea7_WTAP_egat.ipynb) |
+| Presentación (punto 7; 7 diapositivas, ≈ 4:10 min, con notas del orador y tiempos) | [`Tarea7_WTAP_presentacion.pptx`](Tarea7_WTAP_presentacion.pptx) · [`Tarea7_WTAP_presentacion.pdf`](Tarea7_WTAP_presentacion.pdf) |
+| Figuras y resultados | [`figuras_t7/`](figuras_t7) (`arq_egat.png` de `scripts/make_diagramas_t7.py`; el resto y `resultados.json`, del notebook) |
+
+> El nombre del grupo aparece como `[Nombre(s) del grupo]` en el informe y la presentación: se cambia en la variable
+> `GRUPO` al inicio de `scripts/make_informe_t7.py` y `scripts/make_presentation_t7.py`, y se vuelven a generar.
+> Si la rama se fusiona a `main`, reemplaza `claude/charming-allen-rfvy3q` por `main` en el link de Colab.
+
+### Resumen
+
+- **Grafo (punto 1):** bipartito completo $K_{W,T}$. Los nodos arma no tienen features (todas parten de un token
+  aprendible común) y los nodos objetivo llevan `V_j / max V`; cada par arma–objetivo es una arista con atributo `p_ij`.
+  Es no dirigido, la información viaja en ambos sentidos y cada nodo tiene un auto-bucle. Su diámetro es 2.
+- **Encoder EGAT (punto 2):** atención aditiva `LeakyReLU(a_L·z_i + a_R·z_j + a_E·E_ij)`, con la arista en el puntaje y
+  en el mensaje, como en el material. Se usa EGAT porque con GAT las armas quedan idénticas (lo comprueba el notebook).
+  El decoder es el de la Base de la Tarea 6, nuestro mejor modelo, sin cambios.
+- **Entrenamiento (punto 3):** misma configuración que la Base de la Tarea 6 y 3 semillas por modelo. La Base
+  re-entrenada reproduce exactamente los resultados de la Tarea 6.
+- **Ablación de profundidad (punto 4):** con 1 capa el modelo no ve la competencia entre armas (gap de prueba 10×8 de
+  4,17 %); con 2 capas iguala a la Base (2,36 % frente a 2,33 %); con 3 capas logra el mejor modelo (1,54 %).
+- **Convergencia (punto 5):** EGAT-3 llega a un gap < 3 % en 1–2 épocas, frente a 10–13 de la Base, aunque cada época
+  le toma 5,9 s en vez de 4,2 s.
+- **Evaluación (punto 6):** EGAT-3 es la mejor en 5 de los 7 tamaños, con un gap medio de 1,79 % frente a 2,09 % de la
+  Base, y es nuestro primer modelo que supera a MMR en 100×80 (0,67 % frente a 1,23 %). En 15×10 y 30×20 la Base sigue
+  siendo mejor.
+
+### Reproducir
+
+El notebook corre de principio a fin en Colab: clona la librería `eda` en la primera celda y usa GPU si está
+disponible. En CPU con 4 hilos tomó 51 min; con `RAPIDO = True` corre en pocos minutos. El diagrama de la
+arquitectura, el informe y la presentación se regeneran a partir de `figuras_t7/`:
+
+```bash
+python scripts/make_diagramas_t7.py
+python scripts/make_informe_t7.py
+python scripts/make_presentation_t7.py
+soffice --headless --convert-to pdf Tarea7_WTAP_informe.docx Tarea7_WTAP_presentacion.pptx
+```
 
 ---
 

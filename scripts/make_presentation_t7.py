@@ -239,9 +239,10 @@ def rngn(vals, d=1):
     return lo if lo == hi else f"{lo}–{hi}"
 
 
-def rng_(v):
-    v = [x for x in v if x is not None]
-    return "–".join(str(x) for x in sorted({min(v), max(v)})) if v else "—"
+def rng_(v, marca=False):
+    ok = [x for x in v if x is not None]
+    r = "–".join(str(x) for x in sorted({min(ok), max(ok)})) if ok else "—"
+    return r + (f" ({len(ok)}/{len(v)})" if marca and ok and len(ok) < len(v) else "")
 
 
 def avg_sizes(name):
@@ -250,6 +251,15 @@ def avg_sizes(name):
 
 SEC = {n: CONV[n]["sec_per_epoch"] for n in MODELS}
 T6_AVG = {k: float(np.mean([REF6[l][k][0] for l in REF6])) for k in ("Base", "A", "B")}
+WINS = {n: [l for l in SIZES if min(MODELS, key=lambda m: gm(l, m)) == n] for n in MODELS}
+E1_WORST = sum(max(MODELS, key=lambda m: gm(l, m)) == E1 for l in SIZES)
+BEATS_MMR_100 = gm("100×80", E3) < gm("100×80", "MMR")
+SEC_CAPA = (SEC[E3] - SEC[E1]) / 2
+
+
+def lista(xs):
+    xs = list(xs)
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
 
 # ================================================================ 1. portada
 s = prs.slides.add_slide(BLANK)
@@ -268,7 +278,8 @@ items = [("1", "El problema como grafo", "bipartito armas ↔ objetivos; cada ar
           .replace("$p_{ij}$", "p_ij"), BLUE),
          ("2", "Encoder EGAT", "atención aditiva que usa la arista; el decoder de la Tarea 6 queda igual", GREEN),
          ("3", "Ablación de profundidad", "1, 2 y 3 capas = 1, 2 y 3 saltos; el grafo tiene diámetro 2", PURPLE),
-         ("4", "Convergencia", f"misma configuración y {NSEED} semillas por modelo", ORANGE),
+         ("4", "Convergencia", f"EGAT-3 llega a gap < 3 % en {rng_(CONV[E3]['epoch_gap_below_3'])} épocas "
+                            f"(T6: {rng_(CONV[T6]['epoch_gap_below_3'])}); misma configuración, {NSEED} semillas", ORANGE),
          ("5", "Resultados", f"prueba 10×8: T6 {pct(gm(t10, T6))} · EGAT-1 {pct(gm(t10, E1))} · EGAT-2 {pct(gm(t10, E2))}"
                              f" · EGAT-3 {pct(gm(t10, E3))}", RED)]
 for k, (n, t, d, col) in enumerate(items):
@@ -333,9 +344,15 @@ text(s, 9.45, 6.12, 3.4, 0.75, [[("¿Por qué EGAT? ", {"bold": True, "color": G
      spacing=1.0)
 
 # ================================================================ 4. ablación de profundidad
-s = new_slide("ABLACIÓN", PURPLE, "Ablación de profundidad: ¿cuántos saltos necesita el encoder?",
+s = new_slide("ABLACIÓN", PURPLE, "Ablación de profundidad: ¿cuántos saltos?",
               f"EGAT con 1, 2 y 3 capas; puntos = semillas; línea azul = Base de la Tarea 6",
-              notes="(≈45 s) ABL_NOTES")
+              notes="(≈45 s) Cada capa EGAT lleva la información un salto más lejos. Con una capa, un arma solo conoce los "
+                    "objetivos y sus propias probabilidades, no a las armas con las que compite, y el gap sube a "
+                    f"{num(gm(t10, E1), 1)} por ciento en 10 por 8. Con dos capas ya ve a las armas rivales y cubre todo "
+                    "el grafo, porque el diámetro es 2: queda igual que la Base de la Tarea 6, que también tiene dos "
+                    "capas. Con tres capas no aparecen nodos nuevos, pero sí información nueva: cada arma sabe qué otras "
+                    f"opciones tienen sus rivales. Es la mejor: {num(gm(t10, E3), 1)} por ciento en 10 por 8. La "
+                    "limitación es que tiene más parámetros que la Base.")
 image(s, F("profundidad.png"), 0.45, 1.3, w=12.4, h=3.6)
 rows = [["Capas", "Un arma conoce…"],
         ["1", "los objetivos que puede atacar"],
@@ -343,27 +360,61 @@ rows = [["Capas", "Un arma conoce…"],
         ["3", "nada nuevo (diámetro 2): más combinación"]]
 table(s, 0.45, 5.05, 5.6, rows, [0.9, 4.7], row_h=0.43, size=11.5,
       fills=[RGBColor(0xEE, 0xF8, 0xEA), RGBColor(0xDD, 0xF1, 0xD6), RGBColor(0xC9, 0xE8, 0xBF)])
-text(s, 6.35, 5.0, 6.55, 1.95, "ABL_BULLETS", size=12)
+text(s, 6.35, 5.0, 6.55, 1.95,
+     [[("1 capa: ", {"bold": True, "color": PURPLE, "space_after": 4}),
+       (f"no ve la competencia entre armas → {pct(gm(t10, E1))} en 10×8.", {})],
+      [("2 capas: ", {"bold": True, "color": PURPLE, "space_after": 4}),
+       (f"cubre el grafo (diámetro 2) → {pct(gm(t10, E2))}, como la T6 ({pct(gm(t10, T6))}), que también tiene 2.", {})],
+      [("3 capas: ", {"bold": True, "color": PURPLE, "space_after": 4}),
+       (f"ningún nodo nuevo, pero ve las opciones de las armas rivales → {pct(gm(t10, E3))}.", {})],
+      [("Costo: ", {"bold": True, "color": NAVY}),
+       (f"≈ {num(SEC_CAPA, 1)} s más por época por capa; EGAT-3 tiene más parámetros que la T6.", {})]],
+     size=12)
 
 # ================================================================ 5. convergencia
 s = new_slide("RESULTADOS", RED, "Convergencia: misma configuración, 4 modelos",
               f"Media de {NSEED} semillas (banda = mínimo–máximo); 6 000 instancias 10×8, Adam + ReduceLROnPlateau",
-              notes="(≈35 s) CONV_NOTES")
+              notes="(≈35 s) Los cuatro modelos parten igual. Más capas EGAT significa aprender más rápido: EGAT-3 "
+                    f"baja de 3 por ciento de gap en {rng_(CONV[E3]['epoch_gap_below_3'])} épocas, contra "
+                    f"{rng_(CONV[T6]['epoch_gap_below_3'])} de la Base; EGAT-1 casi nunca lo logra. EGAT-3 también "
+                    "termina con la menor pérdida y es la más estable entre semillas. Cada época le cuesta "
+                    f"{num(100 * (SEC[E3] / SEC[T6] - 1), 0)} por ciento más, pero como converge antes, en minutos "
+                    "igual es la más rápida.")
 image(s, F("convergencia.png"), 0.35, 1.35, w=8.3, h=5.6)
 rows = [["", "Gap val. época 0", "Épocas a gap<3 %", "Mejor loss val.", "s / época"]]
 for n in MODELS:
     cv = CONV[n]
-    rows.append([SHORT[n], pct(cv["gap_init"], 0), rng_(cv["epoch_gap_below_3"]),
+    rows.append([SHORT[n], pct(cv["gap_init"], 0), rng_(cv["epoch_gap_below_3"], marca=True),
                  pm(cv["best_val_loss_mean"], cv["best_val_loss_std"], 3), num(cv["sec_per_epoch"], 1)])
 table(s, 8.85, 1.45, 4.1, rows, [0.95, 0.68, 0.72, 1.1, 0.65], row_h=0.44, size=9,
       fills=[RGBColor(0xDC, 0xEA, 0xF7), RGBColor(0xEE, 0xF8, 0xEA), RGBColor(0xDD, 0xF1, 0xD6),
              RGBColor(0xC9, 0xE8, 0xBF)], aligns=[PP_ALIGN.LEFT] + [PP_ALIGN.CENTER] * 4)
-text(s, 8.85, 3.85, 4.1, 3.05, "CONV_BULLETS", size=11.5)
+text(s, 8.85, 3.85, 4.1, 3.05,
+     [[("Velocidad: ", {"bold": True, "color": GREEN, "space_after": 5}),
+       (f"gap < 3 % en {rng_(CONV[E3]['epoch_gap_below_3'])} épocas (EGAT-3), "
+        f"{rng_(CONV[E2]['epoch_gap_below_3'])} (EGAT-2) y {rng_(CONV[T6]['epoch_gap_below_3'])} (T6); EGAT-1 casi "
+        "nunca.", {})],
+      [("Nivel final: ", {"bold": True, "color": GREEN, "space_after": 5}),
+       (f"pérdida {num(CONV[E3]['best_val_loss_mean'], 3)} (EGAT-3) vs {num(CONV[T6]['best_val_loss_mean'], 3)} "
+        "(T6).", {})],
+      [("Costo: ", {"bold": True, "color": RED, "space_after": 5}),
+       (f"{num(SEC[E3], 1)} s por época vs {num(SEC[T6], 1)} s, pero llega antes a gap < 3 %: "
+        f"{num(CONV[E3]['minutes_to_gap3'], 1)} vs {num(CONV[T6]['minutes_to_gap3'], 1)} min.", {})],
+      [("Estabilidad: ", {"bold": True, "color": NAVY}),
+       (f"{len(MODELS) * NSEED} corridas sin divergencias; EGAT-3 es la más estable.", {})]],
+     size=11.5)
 
 # ================================================================ 6. evaluación por tamaño
 s = new_slide("RESULTADOS", RED, "Evaluación por tamaño: gap vs el experto ILS",
               f"Entrenados solo con 10×8; mismas instancias de la Tarea 6 (30 por tamaño, 50 en 10×8) × {NSEED} semillas",
-              notes="(≈45 s) EVAL_NOTES")
+              notes="(≈45 s) Los evaluamos sin reentrenar en siete tamaños, con las tres semillas de cada modelo. En 10 "
+                    f"por 8, EGAT con tres capas logra {num(gm(t10, E3), 1)} por ciento, contra "
+                    f"{num(gm(t10, T6), 1)} de la Base de la Tarea 6, y encuentra la solución del experto en casi la "
+                    f"mitad de las ejecuciones. Es la mejor en {len(WINS[E3])} de los siete tamaños, con "
+                    f"{num(avg_sizes(E3), 1)} por ciento de promedio" +
+                    (", y en 100 por 80 es el primero de nuestros modelos que supera a MMR. " if BEATS_MMR_100 else ". ") +
+                    f"Pero en {lista(WINS[T6]).replace('×', ' por ')} la Base sigue siendo mejor, y ahí EGAT-3 varía "
+                    f"más entre semillas. EGAT con una capa es la peor en {E1_WORST} de los siete tamaños.")
 rows = [["Tamaño"] + [SHORT[n] for n in MODELS] + ["MMR"]]
 bold = []
 for r_, l in enumerate(SIZES, start=1):
@@ -380,14 +431,32 @@ text(s, 0.45, 1.5 + 0.42 * len(rows), 7.6, 0.35, f"Gap (%) media ± desv. están
      "negrita, el mejor de los cuatro modelos.", size=10, color=MUTED)
 cx = crop(F("comparacion.png"), "comparacion_der.png", (0.445, 0.0, 1.0, 1.0))
 image(s, cx, 8.2, 1.4, w=4.8, h=3.6)
-text(s, 8.25, 5.1, 4.75, 1.85, "EVAL_BULLETS", size=11)
+text(s, 8.25, 5.1, 4.75, 1.85,
+     [[("• ", {"space_after": 3}), (f"EGAT-3: la mejor en {len(WINS[E3])} de {len(SIZES)} tamaños; promedio "
+                                   f"{pct(avg_sizes(E3))} vs {pct(avg_sizes(T6))} de la T6.", {})],
+      [("• ", {"space_after": 3}), (f"100×80: por primera vez bajo MMR ({pct(gm('100×80', E3))} vs "
+                                   f"{pct(gm('100×80', 'MMR'))}).", {})],
+      [("• ", {"space_after": 3}), (f"{lista(WINS[T6])}: la T6 sigue siendo mejor.", {})],
+      [("• ", {}), (f"EGAT-1: la peor en {E1_WORST} de {len(SIZES)} tamaños.", {})]],
+     size=11)
 
 # ================================================================ 7. conclusiones
-s = new_slide("CONCLUSIONES", NAVY, "Conclusiones", None, notes="(≈20 s) CONCL_NOTES")
-concl = [("El WTAP como grafo", "CONCL_1", BLUE),
-         ("EGAT en vez de producto punto", "CONCL_2", GREEN),
-         ("Profundidad", "CONCL_3", PURPLE),
-         ("Recomendación", "CONCL_4", RED)]
+s = new_slide("CONCLUSIONES", NAVY, "Conclusiones", None,
+              notes="(≈20 s) En resumen: el WTAP es naturalmente un grafo bipartito, y la EGAT es la forma de usarlo, "
+                    "porque las armas solo se distinguen por sus aristas. Lo que más pesa es la profundidad: con tres "
+                    "capas obtenemos nuestro mejor modelo, que recomendamos como nueva base.")
+concl = [("El WTAP como grafo",
+          "Bipartito armas–objetivos con p_ij en las aristas: no depende del tamaño ni del orden, y sus aristas son las "
+          "acciones del decoder.", BLUE),
+         ("EGAT en vez de producto punto",
+          "Sin datos propios, las armas solo se distinguen por sus aristas: una GAT las deja iguales. A igual profundidad "
+          "(2 capas), la EGAT rinde como la T6 y aprende más rápido.", GREEN),
+         ("Profundidad",
+          f"1 salto no basta ({pct(gm(t10, E1))}); 2 saltos igualan a la T6 ({pct(gm(t10, E2))}); 3 capas dan nuestro "
+          f"mejor modelo ({pct(gm(t10, E3))} en 10×8, {pct(avg_sizes(E3))} en {len(SIZES)} tamaños).", PURPLE),
+         ("Recomendación",
+          f"EGAT de 3 capas como nuevo modelo base. Pendiente: {lista(WINS[T6])}, una T6 de 3 capas y probar 4 capas.",
+          RED)]
 for k, (t, d, col) in enumerate(concl):
     card(s, 0.6 + (k % 2) * 6.15, 1.35 + (k // 2) * 2.75, 5.95, 2.55, t, d, accent=col, title_size=16, body_size=14.5)
 

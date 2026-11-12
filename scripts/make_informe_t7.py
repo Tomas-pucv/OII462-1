@@ -253,8 +253,11 @@ def avg_sizes(name):
 
 
 def ep_rng(v):
-    v = [x for x in v if x is not None]
-    return "no lo alcanza" if not v else (str(min(v)) if min(v) == max(v) else f"{min(v)}–{max(v)}")
+    ok = [x for x in v if x is not None]
+    if not ok:
+        return "no lo alcanza"
+    r = str(min(ok)) if min(ok) == max(ok) else f"{min(ok)}–{max(ok)}"
+    return r if len(ok) == len(v) else f"{r} (solo {len(ok)} de {len(v)})"
 
 
 def short(name):
