@@ -199,7 +199,7 @@ def num(v, d=2):
 
 
 def pct(v, d=2):
-    return num(v, d) + " %"
+    return num(v, d) + "\u00a0%"            # espacio sin corte: el % no queda solo en otra línea
 
 
 def pm(m, s, d=2):
@@ -267,6 +267,22 @@ T6_BASE_WINS = sum(min(("Base", "A", "B"), key=lambda k: REF6[l][k][0]) == "Base
 NRUN = len(MODELS) * NSEED
 SEC = {n: CONV[n]["sec_per_epoch"] for n in MODELS}
 
+
+def lista(xs):
+    xs = list(xs)
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
+
+
+def glast(name, k=10):
+    """Gap de validación medio de las últimas k épocas, promedio de las semillas."""
+    return float(np.mean([np.mean(h["val_gap"][-k:]) for h in HIST[name]]))
+
+
+GAP_VAL = {n: float(np.mean(ABL[n]["best_val_gap"])) for n in MODELS}
+d10 = EV[t10]
+WINS = {n: [l for l in SIZES if best_model(l) == n] for n in MODELS}
+BEATS_MMR_100 = gm("100×80", E3) < gm("100×80", "MMR")
+
 # ================================================================ portada y resumen
 para([("OII462 · Tarea 7", {"bold": True, "color": BLUE, "size": 10})], space_after=0)
 para([("El WTAP como grafo: encoder EGAT y profundidad del encoder", {"bold": True, "color": NAVY, "size": 19})],
@@ -280,7 +296,11 @@ para([b("Resumen. "),
        "Tarea 6 (la Base) por capas EGAT, que usan la arista tanto para decidir a qué vecino prestar atención como en el "
        "mensaje que reciben, y dejamos el decoder igual. Entrenamos con la misma configuración la EGAT con 1, 2 y 3 capas "
        f"({NSEED} semillas cada una) y la comparamos con la Base re-entrenada. ", {}),
-      ("RESUMEN_RESULTADOS", {})])
+      (f"Con 1 capa el modelo no alcanza a ver la competencia entre armas y empeora (gap de prueba {pct(gm(t10, E1))} en "
+       f"10×8); con 2 capas iguala a la Base ({pct(gm(t10, E2))} frente a {pct(gm(t10, T6))}); y con 3 capas logra "
+       f"nuestro mejor resultado: {pct(gm(t10, E3))} en 10×8 y {pct(avg_sizes(E3))} de gap promedio en los {len(SIZES)} "
+       f"tamaños (Base: {pct(avg_sizes(T6))})" + (", y por primera vez supera a MMR en 100×80" if BEATS_MMR_100 else "") +
+       ". Además, converge mucho más rápido.", {})])
 
 para([b("Términos usados en este informe")], keep=True, space_after=3)
 table([["Término", "Significado"],
@@ -414,8 +434,26 @@ note(f"Gaps en %: promedio ± desviación entre las {NSEED} semillas. Validació
 figure(F("profundidad.png"), TEXT_W,
        "Figura 3. Gap según el número de capas EGAT (puntos = semillas; línea = promedio). La línea azul punteada y la "
        "banda muestran la Base de la Tarea 6 (promedio y rango entre semillas).")
-for txt in ("ANALISIS_ABLACION",):
-    para([(txt, {})])
+bullet([b("1 capa (1 salto) no alcanza. "),
+        (f"Cada arma solo conoce los objetivos y sus propias probabilidades, no a las armas con las que compite. Aunque el "
+         f"decoder mezcla información de todas las armas en cada paso, EGAT-1 queda muy atrás: gap de validación "
+         f"{pct(GAP_VAL[E1])} y de prueba {pct(gm(t10, E1))} en 10×8, contra {pct(GAP_VAL[E2])} y {pct(gm(t10, E2))} con 2 "
+         "capas. La competencia entre armas tiene que venir ya en los vectores del encoder.", {})])
+bullet([b("2 capas (2 saltos) cubren el grafo. "),
+        (f"Cada arma ya conoce a las armas que compiten por sus objetivos. EGAT-2 queda al nivel de la Base de la Tarea 6, "
+         f"que también tiene 2 capas ({pct(gm(t10, E2))} frente a {pct(gm(t10, T6))} en 10×8): a igual profundidad, cambiar "
+         "el tipo de atención no cambia mucho la calidad, aunque sí acelera el aprendizaje (sección 5).", {})])
+bullet([b("3 capas: ningún nodo nuevo, pero sí información nueva. "),
+        ("Por el camino arma → objetivo → arma → objetivo, cada arma sabe qué otras opciones tienen sus rivales, es decir, "
+         "si a ellos les conviene más atacar otro objetivo. Es la mejora más grande: gap de validación "
+         f"{pct(GAP_VAL[E3])} ({num(100 * (1 - GAP_VAL[E3] / GAP_VAL[T6]), 0)} % menos que la Base) y de prueba "
+         f"{pct(gm(t10, E3))} en 10×8.", {})])
+bullet([b("Costo y limitación. "),
+        (f"Cada capa agrega unos {miles(round((PARE[E3] - PARE[E2]) / 1000) * 1000)} parámetros y "
+         f"{num((SEC[E3] - SEC[E1]) / 2, 1)} s por época. EGAT-3 tiene más parámetros que la Base "
+         f"({miles(R['params'][E3])} frente a {miles(R['params'][T6])}) y no entrenamos una Base de 3 capas, así que no "
+         "podemos separar del todo el efecto de la profundidad del de la EGAT; la comparación a igual profundidad "
+         "(EGAT-2 frente a la Base) sugiere que lo decisivo es la profundidad.", {})])
 
 # ================================================================ 5. convergencia
 doc.add_heading("5. Convergencia (punto 5)", level=1)
@@ -430,8 +468,31 @@ for n in MODELS:
 table(rows, [3.4, 3.2, 3.4, 4.2, 3.0], size=9, fills=[FILL[n] for n in MODELS],
       aligns=[WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 4)
 note(f"Épocas: rango entre las {NSEED} semillas. Pérdida: promedio ± desviación entre semillas (menor es mejor).")
-for txt in ("ANALISIS_CONVERGENCIA",):
-    para([(txt, {})])
+reached_e1 = sum(e is not None for e in CONV[E1]["epoch_gap_below_3"])
+std_e3 = CONV[E3]["best_val_loss_std"]
+bullet([b("Velocidad en épocas. "),
+        (f"Más capas EGAT significa aprender más rápido. Para llegar a un gap < 3 %, EGAT-3 necesita "
+         f"{ep_rng(CONV[E3]['epoch_gap_below_3'])} épocas, EGAT-2 {ep_rng(CONV[E2]['epoch_gap_below_3'])} y la Base "
+         f"{ep_rng(CONV[T6]['epoch_gap_below_3'])}; EGAT-1 solo lo logra en {reached_e1} de sus {NSEED} semillas. Con la "
+         f"pérdida pasa lo mismo: baja de 0,35 en {ep_rng(CONV[E3]['epoch_loss_below_035'])} épocas (EGAT-3), "
+         f"{ep_rng(CONV[E2]['epoch_loss_below_035'])} (EGAT-2) y {ep_rng(CONV[T6]['epoch_loss_below_035'])} (Base)" +
+         (", y EGAT-1 nunca lo logra." if all(e is None for e in CONV[E1]["epoch_loss_below_035"]) else "."), {})])
+bullet([b("Nivel final. "),
+        (f"La mejor pérdida de validación es {num(CONV[E3]['best_val_loss_mean'], 3)} con EGAT-3, "
+         f"{num(CONV[E2]['best_val_loss_mean'], 3)} con EGAT-2, {num(CONV[T6]['best_val_loss_mean'], 3)} con la Base y "
+         f"{num(CONV[E1]['best_val_loss_mean'], 3)} con EGAT-1; el gap de validación de las últimas 10 épocas, "
+         f"{pct(glast(E3))}, {pct(glast(E2))}, {pct(glast(T6))} y {pct(glast(E1))}.", {})])
+bullet([b("Tiempo de reloj. "),
+        (f"Cada capa EGAT agrega ≈ {num((SEC[E3] - SEC[E1]) / 2, 1)} s por época ({num(SEC[E1], 1)} s con 1 capa, "
+         f"{num(SEC[E2], 1)} s con 2 y {num(SEC[E3], 1)} s con 3; la Base, {num(SEC[T6], 1)} s). Aun así, como EGAT-3 "
+         f"converge en muchas menos épocas, es la que antes llega a un gap < 3 %: {num(CONV[E3]['minutes_to_gap3'], 1)} min, "
+         f"contra {num(CONV[T6]['minutes_to_gap3'], 1)} min de la Base.", {})])
+bullet([b("Estabilidad. "),
+        (f"Las {NRUN} corridas convergen sin divergencias. EGAT-3 es la más estable: sus semillas terminan con casi la "
+         "misma pérdida (desviación " + ("menor que 0,001" if std_e3 < 1e-3 else num(std_e3, 3)) + ") y su gap oscila "
+         f"menos entre épocas ({num(CONV[E3]['oscillation_gap'])} pp, contra "
+         f"{rngn([CONV[n]['oscillation_gap'] for n in (T6, E1, E2)], 2)} pp de las demás). EGAT-1 es la que más varía "
+         "entre semillas y su pérdida se aplana muy por encima de las demás.", {})])
 figure(F("convergencia.png"), TEXT_W * 0.88,
        f"Figura 4. Curvas de entrenamiento por época (línea = promedio de {NSEED} semillas; banda = mínimo y máximo). Abajo "
        "a la derecha, el gap de las soluciones que construye cada modelo en 100 instancias de validación; la línea naranja "
@@ -454,16 +515,58 @@ rand = [gm(l, "Aleatorio") for l in SIZES]
 note(f"Gap (%) respecto del experto ILS; menor es mejor. En negrita, el mejor de los cuatro modelos en cada tamaño. Como "
      f"referencia, asignar las armas al azar da gaps de {num(min(rand), 0)} a {num(max(rand), 0)} %. La Figura 5, al "
      "final de la sección, muestra los mismos datos en barras.")
-for txt in ("ANALISIS_EVALUACION",):
-    para([(txt, {})])
+e2_better = [l for l in SIZES if gm(l, E2) < gm(l, T6)]
+e1_worst = sum(max(MODELS, key=lambda n: gm(l, n)) == E1 for l in SIZES)
+t_mod10 = [TT[t10][n] for n in MODELS]
+t_mod100 = [TT[SIZES[-1]][n] for n in MODELS]
+bullet([b("Tamaño de entrenamiento (10×8). "),
+        (f"EGAT-3 logra el menor gap: {pct(gm(t10, E3))} (mediana {pct(d10[E3]['median'])}; iguala al experto en el "
+         f"{pct(d10[E3]['pct_optimal'], 0)} de las ejecuciones y le gana a MMR en el {pct(d10[E3]['wins_vs_mmr'], 0)}), "
+         f"contra {pct(gm(t10, T6))} de la Base, {pct(gm(t10, E2))} de EGAT-2 y {pct(gm(t10, E1))} de EGAT-1. También "
+         f"mejora a las variantes A y B de la Tarea 6 ({pct(REF6[t10]['A'][0])} y {pct(REF6[t10]['B'][0])}).", {})])
+bullet([b("Generalización de tamaño. "),
+        (f"EGAT-3 es la mejor en {len(WINS[E3])} de los {len(SIZES)} tamaños ({lista(WINS[E3])}) y su gap promedio en los "
+         f"{len(SIZES)} tamaños es {pct(avg_sizes(E3))}, contra {pct(avg_sizes(T6))} de la Base. " +
+         (f"En 100×80 es el primero de nuestros modelos que supera a MMR en promedio ({pct(gm('100×80', E3))} frente a "
+          f"{pct(gm('100×80', 'MMR'))}). " if BEATS_MMR_100 else "") +
+         f"Pero en {lista(WINS[T6])} la Base sigue siendo mejor (" +
+         "; ".join(f"{pct(gm(l, T6))} frente a {pct(gm(l, E3))}" for l in WINS[T6]) +
+         "), y ahí EGAT-3 varía más entre semillas.", {})])
+bullet([b("Las otras profundidades. "),
+        (f"EGAT-1 es la peor en {e1_worst} de los {len(SIZES)} tamaños, y EGAT-2 queda cerca de la Base: mejor en "
+         f"{lista(e2_better)} y peor en los demás.", {})])
+if REFL:
+    big = list(REFL)[-1]
+    bullet([b("Contra un ILS más largo. "),
+            (f"Un ILS de 2 000 iteraciones mejora a la referencia en {rngn([d['mejora_ils_largo'] for d in REFL.values()])} % "
+             f"en los tamaños grandes, pero el orden no cambia: en {big}, EGAT-3 queda a "
+             f"{pct(REFL[big]['gap_vs_ils_largo'][E3])} de él y MMR a {pct(REFL[big]['gap_vs_ils_largo']['MMR'])}.", {})])
+bullet([b("Tiempo. "),
+        (f"En 10×8 los cuatro modelos resuelven una instancia en {rngn(t_mod10)} ms (el experto tarda "
+         f"{num(TT[t10]['Experto ILS'], 0)} ms): como el encoder se calcula una sola vez, sus capas extra casi no se notan. "
+         f"En {SIZES[-1]}, en cambio, todos tardan {rngn(t_mod100, 0)} ms, más que el experto "
+         f"({num(TT[SIZES[-1]]['Experto ILS'], 0)} ms).", {})])
 figure(F("tamanos.png"), TEXT_W,
        "Figura 5. Gap por tamaño: la barra es el promedio, la línea vertical ±1 desviación estándar y los puntos negros, el "
        "promedio de cada semilla.")
 
 # ================================================================ 7. conclusiones
 doc.add_heading("7. Conclusiones", level=1)
-for txt in ("CONCLUSIONES",):
-    para([(txt, {})])
+bullet([b("El WTAP como grafo. "),
+        ("Un grafo bipartito armas–objetivos, con la probabilidad de impacto en las aristas, representa el problema sin "
+         "depender del tamaño ni del orden, y sus aristas coinciden con las acciones del decoder.", {})])
+bullet([b("EGAT, no GAT. "),
+        ("Como las armas no tienen datos propios, una GAT no las puede distinguir; la EGAT sí, gracias a las aristas. A "
+         "igual profundidad (2 capas) rinde como el encoder de la Tarea 6 y aprende más rápido.", {})])
+bullet([b("La profundidad es lo que más importa. "),
+        (f"1 salto no basta ({pct(gm(t10, E1))} en 10×8), 2 saltos igualan a la Tarea 6 ({pct(gm(t10, E2))}) y 3 capas dan "
+         f"el mejor modelo que hemos entrenado ({pct(gm(t10, E3))} en 10×8 y {pct(avg_sizes(E3))} de promedio en los "
+         f"{len(SIZES)} tamaños), a cambio de ≈ {num(100 * (SEC[E3] / SEC[T6] - 1), 0)} % más tiempo por época que la "
+         "Base.", {})])
+bullet([b("Pendiente y recomendación. "),
+        (f"En {lista(WINS[T6])} la Base sigue siendo mejor y EGAT-3 varía más entre semillas. Falta separar el efecto de "
+         "la profundidad del de la EGAT (entrenando una Base de 3 capas) y probar 4 capas. Por ahora, recomendamos la EGAT "
+         "de 3 capas como nuevo modelo base.", {})])
 
 doc.add_heading("Referencias", level=1)
 refs = ["Gasse, M., Chételat, D., Ferroni, N., Charlin, L. y Lodi, A. (2019). Exact combinatorial optimization with "
